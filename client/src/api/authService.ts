@@ -20,7 +20,7 @@ export const authService = {
   },
 
   async googleAuth(idToken: string) {
-    const response = await api.post('/auth/firebase/google', { idToken });
+    const response = await api.post('/auth/firebase/google-auth', { idToken });
     storage.setToken(response.data.token);
     return response.data;
   },

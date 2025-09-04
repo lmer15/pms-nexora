@@ -1,7 +1,4 @@
-# TODO: Fix Logo and Background Color Complementarity
+# TODO: Display Profile Picture and Bname
 
-## Tasks
-- [x] Update Tailwind config brand colors to use logo color #3e8348
-- [x] Verify Navbar component uses updated brand color for logo background
-- [x] Test the UI to ensure colors complement each other
-- [x] Adjust Hero overlay if needed for better contrast
+- [x] Edit DashboardLayout.tsx to show current user's profile picture and display name
+- [ ] Test the UI changes in both light and dark modes

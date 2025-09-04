@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Props = {
   darkMode: boolean;
@@ -7,13 +7,24 @@ type Props = {
 
 export default function Navbar({ darkMode, setDarkMode }: Props) {
   const [open, setOpen] = useState(false);
-  const link = "hover:text-brand dark:hover:text-brand-light transition";
+  const link = "text-gray-800 dark:text-gray-300 hover:text-brand dark:hover:text-brand-light transition";
+  const activeLink = "bg-[#0e8407] text-white rounded-lg px-3 py-2";
   const btn = "px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm";
   const ghost = "border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800";
   const solid = "bg-brand text-white hover:brightness-110 dark:bg-brand-light";
 
+  const [activeHash, setActiveHash] = useState<string>(window.location.hash || "#intro");
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setActiveHash(window.location.hash || "#intro");
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   return (
-    <nav className="fixed left-0 top-0 z-50 w-full bg-white/70 backdrop-blur-md shadow-sm dark:bg-gray-950/70 dark:shadow">
+    <nav className="fixed left-0 top-0 z-50 w-full bg-neutral-light/90 backdrop-blur-md shadow-sm dark:bg-neutral-dark/70 dark:shadow">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         {/* Logo */}
         <a href="#intro" className="group flex items-center gap-3">
@@ -30,11 +41,21 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
 
         {/* Desktop nav */}
         <ul className="hidden items-center gap-8 md:flex">
-          <li><a href="#intro" className={link}>Home</a></li>
-          <li><a href="#features" className={link}>Features</a></li>
-          <li><a href="#steps" className={link}>How it works</a></li>
-          <li><a href="#testimonials" className={link}>Reviews</a></li>
-          <li><a href="#cta" className={link}>Contact</a></li>
+          <li>
+            <a href="#intro" className={activeHash === "#intro" ? activeLink : link}>Home</a>
+          </li>
+          <li>
+            <a href="#features" className={activeHash === "#features" ? activeLink : link}>Features</a>
+          </li>
+          <li>
+            <a href="#steps" className={activeHash === "#steps" ? activeLink : link}>How it works</a>
+          </li>
+          <li>
+            <a href="#testimonials" className={activeHash === "#testimonials" ? activeLink : link}>Reviews</a>
+          </li>
+          <li>
+            <a href="#cta" className={activeHash === "#cta" ? activeLink : link}>Contact</a>
+          </li>
         </ul>
 
         {/* Actions */}
@@ -61,7 +82,7 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden bg-white/95 dark:bg-gray-950/95 border-t border-gray-200 dark:border-gray-800 backdrop-blur">
+        <div className="md:hidden bg-neutral-light/95 dark:bg-neutral-dark/95 border-t border-gray-200 dark:border-gray-800 backdrop-blur">
           <ul className="grid gap-3 p-4">
             {[
               ["Home", "#intro"],
@@ -70,16 +91,16 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
               ["Reviews", "#testimonials"],
               ["Contact", "#cta"],
             ].map(([label, href]) => (
-              <a key={href} href={href} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-900">
+              <a key={href} href={href} onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2 ${activeHash === href ? 'bg-[#0e8407] text-white' : 'text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900'}`}>
                 {label}
               </a>
             ))}
           </ul>
           <div className="px-4 pb-4 flex gap-3">
-            <button onClick={() => setDarkMode(!darkMode)} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-700">
+            <button onClick={() => setDarkMode(!darkMode)} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-gray-800 dark:text-gray-300 dark:border-gray-700">
               {darkMode ? "☀️ Light" : "🌙 Dark"}
             </button>
-            <a className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-700" href="#login">Login</a>
+            <a className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-gray-800 dark:text-gray-300 dark:border-gray-700" href="#login">Login</a>
             <a className="flex-1 rounded-lg bg-brand px-4 py-2 text-white" href="#cta">Get started</a>
           </div>
         </div>

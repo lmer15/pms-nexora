@@ -24,7 +24,11 @@ export default function Login() {
       await login(loginEmail, loginPassword);
       // Redirect will be handled by the auth context or router
     } catch (err: any) {
-      setLoginError(err.message);
+      if (err.message === 'Account not found. Please sign up with Google.') {
+        setLoginError(err.message);
+      } else {
+        setLoginError(err.message);
+      }
     } finally {
       setLoginLoading(false);
     }

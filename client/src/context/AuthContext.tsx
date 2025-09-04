@@ -64,18 +64,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    
-    if (!userCredential.user.emailVerified) {
-      await firebaseSignOut(auth);
-      throw new Error('Please verify your email before logging in.');
-    }
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      if (!userCredential.user.emailVerified) {
+        await firebaseSignOut(auth);
+        throw new Error('Please verify your email before logging in.');
+      }
 
-    const idToken = await userCredential.user.getIdToken();
-    setToken(idToken);
-    
-    // Verify with backend
-    await authService.verifyToken(idToken);
+      const idToken = await userCredential.user.getIdToken();
+      setToken(idToken);
+      
+      // Verify with backend
+      await authService.verifyToken(idToken);
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
+        throw new Error('Account not found. Please sign up with Google.');
+      }
+      throw error;
+    }
   };
 
   const register = async (email: string, password: string, firstName: string, lastName: string) => {

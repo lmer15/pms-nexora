@@ -3,6 +3,7 @@ import { useAuth } from "./context/AuthContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
 import FacilityDashboard from "./pages/Dashboard/FacilityDashboard";
+import DashboardLayout from "./components/DashboardLayout";
 import PrivateRoute from "./routes/PrivateRoute";
 
 function AppContent() {
@@ -27,7 +28,9 @@ function AppContent() {
         path="/dashboard"
         element={
           <PrivateRoute>
-            <FacilityDashboard />
+            <DashboardLayout>
+              <FacilityDashboard />
+            </DashboardLayout>
           </PrivateRoute>
         }
       />

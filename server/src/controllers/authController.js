@@ -1,7 +1,7 @@
-const db = require('../models');
-const User = db.User;
+const User = require('../models/User');
 const { generateToken } = require('../utils/generateToken');
 const { admin } = require('../config/firebase-admin');
+const { sendWelcomeEmail } = require('../services/emailService');
 
 exports.firebaseRegister = async (req, res) => {
   try {
@@ -9,17 +9,22 @@ exports.firebaseRegister = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    console.log('Decoded token:', decodedToken);
     const { email, uid } = decodedToken;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required for authentication' });
+    }
+
     // Check if user already exists
-    let user = await User.findOne({ where: { email } });
+    let user = await User.findByEmail(email);
 
     if (user) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
     // Create new user
-    user = await User.create({
+    user = await User.createUser({
       email,
       firebaseUid: uid,
       firstName,
@@ -53,10 +58,15 @@ exports.firebaseGoogleAuth = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    console.log('Decoded token:', decodedToken);
     const { email, name, uid, picture } = decodedToken;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required for authentication' });
+    }
+
     // Find or create user
-    let user = await User.findOne({ where: { email } });
+    let user = await User.findByEmail(email);
 
     if (!user) {
       // Extract first and last name from Google profile
@@ -64,7 +74,7 @@ exports.firebaseGoogleAuth = async (req, res) => {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      user = await User.create({
+      user = await User.createUser({
         email,
         firebaseUid: uid,
         firstName,
@@ -72,11 +82,20 @@ exports.firebaseGoogleAuth = async (req, res) => {
         isEmailVerified: true, // Google emails are verified
         profilePicture: picture
       });
+
+      // Send welcome email on first login
+      try {
+          await sendWelcomeEmail(user);
+          console.log(`Welcome email sent successfully to ${user.email}`);
+        } catch (emailError) {
+          console.error('Failed to send welcome email:', emailError);
+          // Don't fail the registration process due to email error
+      }
     } else {
       // Update Firebase UID if not set
       if (!user.firebaseUid) {
-        user.firebaseUid = uid;
-        await user.save();
+        await User.update(user.id, { firebaseUid: uid });
+        user.firebaseUid = uid; // Update local object for response
       }
     }
 
@@ -107,10 +126,15 @@ exports.firebaseVerify = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    console.log('Decoded token:', decodedToken);
     const { email, uid } = decodedToken;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required for authentication' });
+    }
+
     // Find user
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findByEmail(email);
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -122,11 +146,11 @@ exports.firebaseVerify = async (req, res) => {
     }
 
     // Update user verification status and Firebase UID
-    user.isEmailVerified = true;
+    const updateData = { isEmailVerified: true };
     if (!user.firebaseUid) {
-      user.firebaseUid = uid;
+      updateData.firebaseUid = uid;
     }
-    await user.save();
+    await User.update(user.id, updateData);
 
     // Generate JWT token
     const token = generateToken(user.id);
@@ -154,10 +178,15 @@ exports.firebaseSync = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    console.log('Decoded token:', decodedToken);
     const { email, uid, name, picture, email_verified } = decodedToken;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required for authentication' });
+    }
+
     // Find user
-    let user = await User.findOne({ where: { email } });
+    let user = await User.findByEmail(email);
 
     if (!user) {
       // Create user if doesn't exist
@@ -165,7 +194,7 @@ exports.firebaseSync = async (req, res) => {
       const firstName = nameParts[0] || 'User';
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      user = await User.create({
+      user = await User.createUser({
         email,
         firebaseUid: uid,
         firstName,
@@ -175,16 +204,19 @@ exports.firebaseSync = async (req, res) => {
       });
     } else {
       // Update user data
+      const updateData = {};
       if (!user.firebaseUid) {
-        user.firebaseUid = uid;
+        updateData.firebaseUid = uid;
       }
-      if (email_verified) {
-        user.isEmailVerified = true;
+      if (email_verified && !user.isEmailVerified) {
+        updateData.isEmailVerified = true;
       }
       if (picture && !user.profilePicture) {
-        user.profilePicture = picture;
+        updateData.profilePicture = picture;
       }
-      await user.save();
+      if (Object.keys(updateData).length > 0) {
+        user = await User.update(user.id, updateData);
+      }
     }
 
     // Generate JWT token
