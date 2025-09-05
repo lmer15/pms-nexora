@@ -55,6 +55,9 @@ class Facility extends FirestoreService {
       updatedAt: new Date()
     };
 
+    // Ensure location is not included
+    delete data.location;
+
     return this.create(data);
   }
 }

@@ -2,7 +2,7 @@ const Facility = require('../models/Facility');
 
 exports.getFacilities = async (req, res) => {
   try {
-    const facilities = await Facility.findAll();
+    const facilities = await Facility.findByMember(req.userId);
     res.json(facilities);
   } catch (error) {
     console.error('Error fetching facilities:', error);
@@ -16,6 +16,10 @@ exports.getFacilityById = async (req, res) => {
     if (!facility) {
       return res.status(404).json({ message: 'Facility not found' });
     }
+    // Check if user is owner or member
+    if (facility.ownerId !== req.userId && !(facility.members || []).includes(req.userId)) {
+      return res.status(403).json({ message: 'Access denied to this facility' });
+    }
     res.json(facility);
   } catch (error) {
     console.error('Error fetching facility:', error);
@@ -25,9 +29,12 @@ exports.getFacilityById = async (req, res) => {
 
 exports.createFacility = async (req, res) => {
   try {
-    // Pass ownerId from authenticated user or use default for testing
-    const ownerId = req.userId || 'test-owner-id';
-    const facility = await Facility.createFacility(req.body, ownerId);
+    // Use authenticated user as owner
+    const ownerId = req.userId;
+    const facilityData = { ...req.body };
+    delete facilityData.ownerId; // Remove ownerId from body, use authenticated user
+    delete facilityData.location; // Remove location from facility data
+    const facility = await Facility.createFacility(facilityData, ownerId);
     res.status(201).json(facility);
   } catch (error) {
     console.error('Error creating facility:', error);

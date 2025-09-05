@@ -45,7 +45,14 @@ exports.getTasksByUser = async (req, res) => {
 
 exports.createTask = async (req, res) => {
   try {
-    const task = await Task.createTask(req.body);
+    const creatorId = req.userId; // from authMiddleware
+    const { projectId, ...taskData } = req.body;
+
+    if (!projectId) {
+      return res.status(400).json({ message: 'Project ID is required' });
+    }
+
+    const task = await Task.createTask(taskData, projectId, creatorId);
     res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);

@@ -7,19 +7,27 @@ class Project extends FirestoreService {
 
   // Find projects by facility
   async findByFacility(facilityId) {
-    return this.findByField('facilityId', facilityId);
+    // Exclude archived projects by default
+    return this.query([
+      { field: 'facilityId', operator: '==', value: facilityId },
+      { field: 'archived', operator: '==', value: false }
+    ]);
   }
 
   // Find projects by assignee
   async findByAssignee(userId) {
     return this.query([
-      { field: 'assignees', operator: 'array-contains', value: userId }
+      { field: 'assignees', operator: 'array-contains', value: userId },
+      { field: 'archived', operator: '==', value: false }
     ]);
   }
 
   // Find projects by status
   async findByStatus(status) {
-    return this.findByField('status', status);
+    return this.query([
+      { field: 'status', operator: '==', value: status },
+      { field: 'archived', operator: '==', value: false }
+    ]);
   }
 
   // Add assignee to project
@@ -60,6 +68,11 @@ class Project extends FirestoreService {
     return this.update(projectId, { status });
   }
 
+  // Archive project
+  async archiveProject(projectId) {
+    return this.update(projectId, { archived: true, updatedAt: new Date() });
+  }
+
   // Create project with facility
   async createProject(projectData, facilityId, creatorId) {
     const data = {
@@ -68,6 +81,7 @@ class Project extends FirestoreService {
       creatorId,
       assignees: projectData.assignees || [creatorId],
       status: projectData.status || 'planning',
+      archived: false,
       createdAt: new Date(),
       updatedAt: new Date()
     };

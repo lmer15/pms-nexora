@@ -35,7 +35,9 @@ exports.getProjectsByFacility = async (req, res) => {
 
 exports.createProject = async (req, res) => {
   try {
-    const project = await Project.createProject(req.body);
+    const { facilityId, ...projectData } = req.body;
+    const creatorId = req.userId; // Get authenticated user ID from middleware
+    const project = await Project.createProject(projectData, facilityId, creatorId);
     res.status(201).json(project);
   } catch (error) {
     console.error('Error creating project:', error);
@@ -66,5 +68,18 @@ exports.deleteProject = async (req, res) => {
   } catch (error) {
     console.error('Error deleting project:', error);
     res.status(500).json({ message: 'Server error deleting project' });
+  }
+};
+
+exports.archiveProject = async (req, res) => {
+  try {
+    const archivedProject = await Project.archiveProject(req.params.id);
+    if (!archivedProject) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+    res.json({ message: 'Project archived successfully', project: archivedProject });
+  } catch (error) {
+    console.error('Error archiving project:', error);
+    res.status(500).json({ message: 'Server error archiving project' });
   }
 };

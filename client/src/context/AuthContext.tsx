@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { authService } from '../api/authService';
+import { getFirebaseErrorMessage } from '../utils/firebaseErrorMessages';
 
 interface AuthContextType {
   user: User | null;
@@ -66,7 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
+
       if (!userCredential.user.emailVerified) {
         await firebaseSignOut(auth);
         throw new Error('Please verify your email before logging in.');
@@ -74,14 +75,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const idToken = await userCredential.user.getIdToken();
       setToken(idToken);
-      
+
       // Verify with backend
       await authService.verifyToken(idToken);
     } catch (error: any) {
+      // Handle specific cases first
       if (error.code === 'auth/user-not-found') {
         throw new Error('Account not found. Please sign up with Google.');
       }
-      throw error;
+      // Use the utility for user-friendly Firebase error messages
+      const friendlyMessage = getFirebaseErrorMessage(error);
+      throw new Error(friendlyMessage);
     }
   };
 

@@ -10,9 +10,9 @@ const {
 } = require('../controllers/facilityController');
 
 // Routes
-router.get('/', getFacilities);
-router.get('/:id', getFacilityById);
-router.post('/', createFacility); // Temporarily remove auth for testing
+router.get('/', authMiddleware, getFacilities);
+router.get('/:id', authMiddleware, getFacilityById);
+router.post('/', authMiddleware, createFacility);
 router.put('/:id', authMiddleware, updateFacility);
 router.delete('/:id', authMiddleware, deleteFacility);
 
