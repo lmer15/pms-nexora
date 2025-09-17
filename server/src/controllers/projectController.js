@@ -1,4 +1,6 @@
 const Project = require('../models/Project');
+const Task = require('../models/Task');
+
 
 exports.getProjects = async (req, res) => {
   try {
@@ -60,6 +62,13 @@ exports.updateProject = async (req, res) => {
 
 exports.deleteProject = async (req, res) => {
   try {
+    // First, delete all tasks associated with the project
+    const tasks = await Task.findByProject(req.params.id);
+    for (const task of tasks) {
+      await Task.delete(task.id);
+    }
+
+    // Then delete the project
     const deleted = await Project.delete(req.params.id);
     if (!deleted) {
       return res.status(404).json({ message: 'Project not found' });
@@ -70,6 +79,7 @@ exports.deleteProject = async (req, res) => {
     res.status(500).json({ message: 'Server error deleting project' });
   }
 };
+
 
 exports.archiveProject = async (req, res) => {
   try {

@@ -3,11 +3,13 @@ require('./config/firebase-admin');
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const facilityRoutes = require('./routes/facilityRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const noteRoutes = require('./routes/noteRoutes');
+const { downloadAttachment } = require('./controllers/taskAttachmentController');
 
 const app = express();
 
@@ -19,6 +21,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files for attachments
+app.use('/uploads/attachments', express.static(path.join(__dirname, '../uploads/attachments')));
+
 // Test route
 app.get('/api/health', (req, res) => {
   res.json({
@@ -27,6 +32,9 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Public download route
+app.get('/api/attachments/download/:filename', downloadAttachment);
 
 // Routes
 app.use('/api/auth', authRoutes);

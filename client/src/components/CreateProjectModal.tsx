@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { LucideX, LucidePlus } from 'lucide-react';
 import { projectService, Project } from '../api/projectService';
 import { useAuth } from '../context/AuthContext';
+import Notification from './Notification';
+import LoadingAnimation from './LoadingAnimation';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -24,6 +26,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showNotification, setShowNotification] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,14 +42,16 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       const newProject = await projectService.create({
         name: formData.name.trim(),
         facilityId,
-        creatorId: user?.uid || 'current-user-id', // Use authenticated user ID
-        assignees: [user?.uid || 'current-user-id'], // Use authenticated user ID
+        creatorId: user?.uid || 'current-user-id',
+        assignees: [user?.uid || 'current-user-id'],
         status: 'planning',
+        archived: false
       });
 
       onProjectCreated(newProject);
       setFormData({ name: '' });
       onClose();
+      setShowNotification(true);
     } catch (err) {
       setError('Failed to create project. Please try again.');
       console.error('Error creating project:', err);
@@ -115,13 +120,26 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="flex-1 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              {isLoading ? 'Creating...' : 'Create Project'}
+              {isLoading ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Creating...</span>
+                </div>
+              ) : (
+                'Create Project'
+              )}
             </button>
           </div>
         </form>
       </div>
+      {showNotification && (
+        <Notification
+          message="Project created successfully!"
+          onClose={() => setShowNotification(false)}
+        />
+      )}
     </div>
   );
 };

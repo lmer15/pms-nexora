@@ -48,9 +48,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
   return (
     <>
       <div
-        className={`h-screen flex flex-col transition-all duration-300 ${
+        className={`fixed left-0 top-0 flex flex-col transition-all duration-300 ${
           isCollapsed ? 'w-16' : 'w-64'
-        } ${
+        } h-screen ${
           isDarkMode
             ? 'bg-neutral-dark text-white border-r border-gray-700'
             : 'bg-white text-gray-900 border-r border-gray-200'
@@ -112,7 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
                 }
                 title="Facilities"
               >
-                <LucideBuilding className="w-5 h-5 flex-shrink-0" />
+                <LucideBuilding className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
               </NavLink>
             ) : facilities.length === 0 ? (
               <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
@@ -165,7 +165,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideGrid className="w-5 h-5 flex-shrink-0" />
+            <LucideGrid className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Dashboard</span>}
           </NavLink>
 
@@ -183,7 +183,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideClipboardList className="w-5 h-5 flex-shrink-0" />
+            <LucideClipboardList className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Resource Mgmt</span>}
           </NavLink>
 
@@ -201,7 +201,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideClock className="w-5 h-5 flex-shrink-0" />
+            <LucideClock className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Time log</span>}
           </NavLink>
 
@@ -219,7 +219,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideFileText className="w-5 h-5 flex-shrink-0" />
+            <LucideFileText className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Notes</span>}
           </NavLink>
 
@@ -237,7 +237,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideMessageSquare className="w-5 h-5 flex-shrink-0" />
+            <LucideMessageSquare className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Meetings</span>}
           </NavLink>
 
@@ -255,7 +255,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideUsers className="w-5 h-5 flex-shrink-0" />
+            <LucideUsers className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Users</span>}
           </NavLink>
 
@@ -273,7 +273,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               }`
             }
           >
-            <LucideSettings className="w-5 h-5 flex-shrink-0" />
+            <LucideSettings className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
             {!isCollapsed && <span className="ml-2 text-xs">Settings</span>}
           </NavLink>
         </nav>

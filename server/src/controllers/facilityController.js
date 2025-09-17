@@ -1,4 +1,5 @@
 const Facility = require('../models/Facility');
+const UserFacility = require('../models/UserFacility');
 
 exports.getFacilities = async (req, res) => {
   try {
@@ -35,6 +36,15 @@ exports.createFacility = async (req, res) => {
     delete facilityData.ownerId; // Remove ownerId from body, use authenticated user
     delete facilityData.location; // Remove location from facility data
     const facility = await Facility.createFacility(facilityData, ownerId);
+
+    // Add owner to UserFacility collection for proper authorization
+    try {
+      await UserFacility.addUserToFacility(ownerId, facility.id, 'owner');
+    } catch (userFacilityError) {
+      console.error('Error adding owner to UserFacility:', userFacilityError);
+      // Don't fail the facility creation if UserFacility fails
+    }
+
     res.status(201).json(facility);
   } catch (error) {
     console.error('Error creating facility:', error);

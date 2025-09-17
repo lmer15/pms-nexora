@@ -85,12 +85,8 @@ class FirestoreService {
       });
       return results;
     } catch (error) {
-      // Handle case where collection doesn't exist yet (empty database)
-      if (error.code === 5 || error.message.includes('NOT_FOUND')) {
-        console.log(`Collection '${this.collection.id}' does not exist yet, returning empty results`);
-        return [];
-      }
-      throw new Error(`Error finding documents: ${error.message}`);
+      console.log(`Error querying collection '${this.collection.id}': ${error.message}, returning empty results`);
+      return [];
     }
   }
 

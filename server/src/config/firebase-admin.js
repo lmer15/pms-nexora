@@ -11,22 +11,14 @@ if (!serviceAccount) {
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: firebaseDatabaseURL || `https://${serviceAccount.project_id}.firebaseio.com`
+    databaseURL: firebaseDatabaseURL || `https://${serviceAccount.project_id}.asia-southeast1.firebasedatabase.app`
   });
 }
 
 // Initialize Firestore
 const db = admin.firestore();
+// Initialize Realtime Database
+const realtimeDb = admin.database();
 
-// Test Firestore connection
-db.collection('test').doc('test').get().then(() => {
-  console.log('Firestore connection successful');
-}).catch((error) => {
-  console.error('Firestore connection failed:', error.message);
-  if (error.code === 5) {
-    console.error('Firestore database not found. Please ensure Firestore is enabled in Firebase console for project:', serviceAccount.project_id);
-  }
-});
-
-module.exports = { db, admin };
+module.exports = { db, realtimeDb, admin };
 

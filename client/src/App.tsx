@@ -13,16 +13,13 @@ import Notes from "./pages/Notes";
 import Meetings from "./pages/Meetings";
 import DashboardLayout from "./components/DashboardLayout";
 import PrivateRoute from "./routes/PrivateRoute";
+import LoadingAnimation from "./components/LoadingAnimation";
 
 function AppContent() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
-      </div>
-    );
+    return <LoadingAnimation />;
   }
 
   return (

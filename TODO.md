@@ -1,21 +1,12 @@
-# Project Delete/Archive Implementation
+# TODO: Update ShareFacilityModal to Follow System UI
 
-## Server Side
-- [ ] Add 'archived' field to Project model
-- [ ] Add archiveProject method in Project model
-- [ ] Add archiveProject controller function
-- [ ] Add archive route in projectRoutes.js
-
-## Client Side
-- [ ] Update Project interface to include 'archived' field
-- [ ] Add archive method to projectService API
-- [ ] Make 3 dots button functional with dropdown menu (Delete & Archive options)
-- [ ] Add confirmation dialogs for both delete and archive actions
-- [ ] Handle delete/archive actions and update UI accordingly
-- [ ] Filter out archived projects from the view
-
-## Testing
-- [ ] Test delete functionality
-- [ ] Test archive functionality
-- [ ] Verify confirmation dialogs work properly
-- [ ] Ensure archived projects are hidden from the facility view
+- [x] Rename component and interface from ShareBoardModal/ShareBoardModalProps to ShareFacilityModal/ShareFacilityModalProps
+- [x] Add isDarkMode prop to the component props
+- [x] Remove the upgrade banner section entirely
+- [x] Update modal container classes for dark/light mode support (bg-gray-900 or bg-white, text-white or text-gray-900)
+- [x] Adjust header spacing from px-4 py-3 to px-6 py-3
+- [x] Adjust email input section spacing from px-4 py-3 to p-6
+- [x] Adjust link sharing section spacing from px-4 py-3 to p-6
+- [x] Adjust members list spacing from px-4 py-3 to p-6
+- [x] Update input, select, and button classes for consistent dark mode and focus styling (e.g., focus:ring-4 focus:ring-brand)
+- [x] Ensure all functions and layout structure remain unchanged
