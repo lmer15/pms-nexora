@@ -48,12 +48,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(user);
       if (user) {
         const idToken = await user.getIdToken();
-        setToken(idToken);
         // Sync user with backend
         try {
-          await authService.syncUser(idToken);
+          const response = await authService.syncUser(idToken);
+          setToken(response.token);
         } catch (error) {
           console.error('Failed to sync user with backend:', error);
+          // If sync fails, logout to prevent loop
+          await firebaseSignOut(auth);
+          setToken(null);
         }
       } else {
         setToken(null);
@@ -74,10 +77,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const idToken = await userCredential.user.getIdToken();
-      setToken(idToken);
 
       // Verify with backend
-      await authService.verifyToken(idToken);
+      const response = await authService.verifyToken(idToken);
+      setToken(response.token);
     } catch (error: any) {
       // Handle specific cases first
       if (error.code === 'auth/user-not-found') {
@@ -91,7 +94,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (email: string, password: string, firstName: string, lastName: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    
+
     // Update profile with name
     await updateProfile(userCredential.user, {
       displayName: `${firstName} ${lastName}`
@@ -99,10 +102,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Send verification email
     await sendEmailVerification(userCredential.user);
-    
+
     // Register user in backend
     const idToken = await userCredential.user.getIdToken();
-    await authService.registerUser(idToken, firstName, lastName);
+    const response = await authService.registerUser(idToken, firstName, lastName);
+    setToken(response.token);
   };
 
   const googleLogin = async (idToken: string) => {

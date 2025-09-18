@@ -269,6 +269,13 @@ const taskService = {
     const response = await api.post(`/tasks/${taskId}/activityLogs`, activityData);
     return response.data;
   },
+
+  // Fetch user profiles by IDs
+  fetchUserProfilesByIds: async (userIds: string[]): Promise<Record<string, { firstName: string; lastName: string; profilePicture?: string }>> => {
+    if (userIds.length === 0) return {};
+    const response = await api.post('/auth/users/profiles', { userIds });
+    return response.data;
+  },
 };
 
 export { taskService };

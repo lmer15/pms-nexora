@@ -41,9 +41,14 @@ exports.getCommentsByTask = async (req, res) => {
     const User = require('../models/User');
     const userIds = [...new Set(comments.map(c => c.creatorId))];
     const userProfiles = {};
-    for (const id of userIds) {
-      const profile = await User.getProfile(id);
-      userProfiles[id] = profile || { firstName: 'Unknown', lastName: '', profilePicture: null };
+    for (const userId of userIds) {
+      const user = await User.findById(userId);
+      if (user) {
+        const profile = await User.getProfile(user.id);
+        userProfiles[userId] = profile || { firstName: 'Unknown', lastName: '', profilePicture: null };
+      } else {
+        userProfiles[userId] = { firstName: 'Unknown', lastName: '', profilePicture: null };
+      }
     }
 
     // Attach user profile info to comments
@@ -85,7 +90,8 @@ exports.createComment = async (req, res) => {
 
     // Fetch user profile for the created comment
     const User = require('../models/User');
-    const userProfile = await User.getProfile(creatorId);
+    const user = await User.findById(creatorId);
+    const userProfile = user ? await User.getProfile(user.id) : null;
 
     // Attach user profile info to the comment
     const commentWithUser = {
@@ -137,7 +143,19 @@ exports.updateComment = async (req, res) => {
     if (!updatedComment) {
       return res.status(404).json({ message: 'Comment not found' });
     }
-    res.json(updatedComment);
+
+    // Fetch user profile for the updated comment
+    const User = require('../models/User');
+    const user = await User.findById(updatedComment.creatorId);
+    const userProfile = user ? await User.getProfile(user.id) : null;
+
+    // Attach user profile info to the comment
+    const commentWithUser = {
+      ...updatedComment,
+      userProfile: userProfile || { firstName: 'Unknown', lastName: '', profilePicture: null }
+    };
+
+    res.json(commentWithUser);
   } catch (error) {
     console.error('Error updating comment:', error);
     res.status(500).json({ message: 'Server error updating comment' });

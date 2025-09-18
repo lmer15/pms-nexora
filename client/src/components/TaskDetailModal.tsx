@@ -59,6 +59,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     type: 'error',
   });
 
+  const [commentCount, setCommentCount] = useState(0);
+
   useEffect(() => {
     setIsDarkMode(document.documentElement.classList.contains('dark'));
   }, []);
@@ -69,6 +71,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       setActiveTab('overview'); // Reset to overview when opening
     }
   }, [isOpen, taskId]);
+
+  useEffect(() => {
+    if (taskDetails?.comments) {
+      setCommentCount(taskDetails.comments.length);
+    }
+  }, [taskDetails?.comments]);
 
   const loadTaskDetails = async () => {
     setLoading(true);
@@ -119,7 +127,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LucideFileText, count: null },
-    { id: 'comments', label: 'Comments', icon: LucideMessageSquare, count: taskDetails?.comments?.length || 0 },
+    { id: 'comments', label: 'Comments', icon: LucideMessageSquare, count: commentCount || (taskDetails?.comments?.length || 0) },
     { id: 'attachments', label: 'Attachments', icon: LucidePaperclip, count: taskDetails?.attachments?.length || 0 },
     { id: 'dependencies', label: 'Dependencies', icon: LucideGitBranch, count: taskDetails?.dependencies?.length || 0 },
     { id: 'subtasks', label: 'Subtasks', icon: LucideCheckSquare, count: taskDetails?.subtasks?.length || 0 },
@@ -149,6 +157,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
               taskId={taskId}
               isDarkMode={isDarkMode}
               onShowWarning={showWarning}
+              onCountChange={setCommentCount}
             />
         );
       case 'attachments':

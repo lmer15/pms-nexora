@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const facilityRoutes = require('./routes/facilityRoutes');
+const facilityShareRoutes = require('./routes/facilityShareRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const noteRoutes = require('./routes/noteRoutes');
@@ -39,6 +40,7 @@ app.get('/api/attachments/download/:filename', downloadAttachment);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/facilities', facilityRoutes);
+app.use('/api/facilities', facilityShareRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);

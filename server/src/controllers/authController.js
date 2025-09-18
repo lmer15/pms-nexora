@@ -267,3 +267,29 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+exports.getUserProfiles = async (req, res) => {
+  try {
+    const { userIds } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ message: 'userIds must be a non-empty array' });
+    }
+
+    const profiles = {};
+    for (const userId of userIds) {
+      const user = await User.findById(userId);
+      if (user) {
+        const profile = await User.getProfile(user.id);
+        profiles[userId] = profile || { firstName: 'Unknown', lastName: '', profilePicture: null };
+      } else {
+        profiles[userId] = { firstName: 'Unknown', lastName: '', profilePicture: null };
+      }
+    }
+
+    res.json(profiles);
+  } catch (error) {
+    console.error('Get user profiles error:', error);
+    res.status(500).json({ message: 'Server error fetching user profiles' });
+  }
+};

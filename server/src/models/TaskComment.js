@@ -17,11 +17,22 @@ class TaskComment extends RealtimeDatabaseService {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    // Fetch user profile
+    const User = require('./User');
+    const user = await User.findById(creatorId);
+    const userProfile = user ? await User.getProfile(user.id) : { firstName: 'Unknown', lastName: '', profilePicture: null };
+    data.userProfile = userProfile;
     return this.create(data);
   }
 
   async updateComment(commentId, updateData) {
-    return this.update(commentId, { ...updateData, updatedAt: new Date() });
+    // Preserve userProfile if not provided
+    const current = await this.findById(commentId);
+    const data = { ...updateData, updatedAt: new Date() };
+    if (current && current.userProfile && !data.userProfile) {
+      data.userProfile = current.userProfile;
+    }
+    return this.update(commentId, data);
   }
 
   async deleteComment(commentId) {

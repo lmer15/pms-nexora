@@ -43,6 +43,15 @@ body { transition: background-color .25s, color .25s; font-family: Poppins ; scr
   display: block;
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Project card improvements */
 .group.w-60 {
   border-radius: 0.5rem;

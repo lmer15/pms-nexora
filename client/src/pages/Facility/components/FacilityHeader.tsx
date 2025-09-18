@@ -10,7 +10,7 @@ import {
   LucideShare2,
 } from 'lucide-react';
 import { Facility } from '../types';
-import ShareBoardModal from './ShareFacilityModal';
+import ShareFacilityModal from './ShareFacilityModal';
 
 interface FacilityHeaderProps {
   facility: Facility;
@@ -33,16 +33,6 @@ const FacilityHeader: React.FC<FacilityHeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-
-  // Dummy members data for modal
-  const members = [
-    { id: 'you', name: 'Elmer Rapon', username: 'elmerrapon', role: 'Admin', avatarColor: '#f87171' },
-    { id: 'bd', name: 'Benjie Degamo', username: 'benjiedegamo', role: 'Admin', avatarColor: '#60a5fa' },
-    { id: 'ja', name: 'Jhonmark Almedilla', username: 'jhonmarkalmedilla', role: 'Admin', avatarColor: '#a78bfa' },
-    { id: 'pj', name: 'panilag jen', username: 'panilagjen', role: 'Admin', avatarColor: '#34d399' },
-    { id: 'rv', name: 'Rohanna Villagracia', username: 'rohannavillagracia', role: 'Admin', avatarColor: '#818cf8' },
-    { id: 'ct', name: 'Christine Toñacao', username: 'christinetonacao', role: 'Guest', avatarColor: '#c084fc' },
-  ];
 
   return (
     <div className={`p-3 border-b rounded-md ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
@@ -126,10 +116,11 @@ const FacilityHeader: React.FC<FacilityHeaderProps> = ({
       )}
 
       {/* Share Modal */}
-      <ShareBoardModal
+      <ShareFacilityModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        members={members}
+        facilityId={facility.id}
+        isDarkMode={isDarkMode}
       />
     </div>
   );

@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
+import AcceptInvitation from "./pages/AcceptInvitation";
+import JoinFacility from "./pages/JoinFacility";
 import FacilityDashboard from "./pages/Dashboard/FacilityDashboard";
 import Facilities from "./pages/Facilities";
 import FacilityView from "./pages/Facility/FacilityView";
@@ -29,6 +31,8 @@ function AppContent() {
         path="/login"
         element={user ? <Navigate to="/dashboard" replace /> : <Login />}
       />
+          <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
+          <Route path="/join-facility/:linkId" element={<JoinFacility />} />
       <Route
         path="/dashboard"
         element={

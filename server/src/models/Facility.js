@@ -10,11 +10,25 @@ class Facility extends FirestoreService {
     return this.findByField('ownerId', ownerId);
   }
 
-  // Find facilities by member
+  // Find facilities by member (using UserFacility relationships)
   async findByMember(userId) {
-    return this.query([
-      { field: 'members', operator: 'array-contains', value: userId }
-    ]);
+    const UserFacility = require('./UserFacility');
+    const userFacilities = await UserFacility.findByUser(userId);
+    
+    if (userFacilities.length === 0) {
+      return [];
+    }
+    
+    // Get all facility IDs for this user
+    const facilityIds = userFacilities.map(uf => uf.facilityId);
+    
+    // Fetch all facilities where user is a member
+    const facilities = await Promise.all(
+      facilityIds.map(facilityId => this.findById(facilityId))
+    );
+    
+    // Filter out any null results and return valid facilities
+    return facilities.filter(facility => facility !== null);
   }
 
   // Add member to facility
