@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { LucideClock, LucidePlay, LucideSquare, LucidePlus, LucidePause } from 'lucide-react';
-import { TaskTimeLog } from '../../api/taskService';
+import { LucideClock, LucidePlay, LucideSquare, LucidePlus, LucidePause, LucideEdit, LucideTrash2 } from 'lucide-react';
+import { TaskTimeLog, taskService } from '../../api/taskService';
 import { Button } from '../ui/button';
 
 interface TaskDetailTimeLogsProps {
   timeLogs: TaskTimeLog[];
   isDarkMode: boolean;
+  taskId: string;
   onShowWarning?: (message: string, type?: 'warning' | 'error' | 'success') => void;
+  onTimeLogsUpdate?: () => void;
+  onShowConfirmation?: (title: string, message: string, onConfirm: () => void, confirmText?: string, cancelText?: string) => void;
 }
 
-const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ timeLogs, isDarkMode }) => {
+const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ 
+  timeLogs, 
+  isDarkMode, 
+  taskId, 
+  onShowWarning, 
+  onTimeLogsUpdate,
+  onShowConfirmation
+}) => {
   const [isTracking, setIsTracking] = useState(false);
   const [currentSession, setCurrentSession] = useState<{ startTime: Date; description: string } | null>(null);
   const [newLogDescription, setNewLogDescription] = useState('');
@@ -20,6 +30,32 @@ const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ timeLogs, isDar
     endTime: '',
     duration: 0
   });
+  const [editingLog, setEditingLog] = useState<string | null>(null);
+  const [editLog, setEditLog] = useState({
+    description: '',
+    startTime: '',
+    endTime: '',
+    duration: 0
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [userProfiles, setUserProfiles] = useState<Record<string, { firstName: string; lastName: string; profilePicture?: string }>>({});
+
+  // Fetch user profiles for time log users
+  useEffect(() => {
+    const fetchUserProfiles = async () => {
+      if (timeLogs.length === 0) return;
+      
+      const userIds = [...new Set(timeLogs.map(log => log.userId))];
+      try {
+        const profiles = await taskService.fetchUserProfilesByIds(userIds);
+        setUserProfiles(profiles);
+      } catch (error) {
+        console.error('Failed to fetch user profiles:', error);
+      }
+    };
+
+    fetchUserProfiles();
+  }, [timeLogs]);
 
   const formatDuration = (duration?: number) => {
     if (!duration) return '0m';
@@ -68,18 +104,23 @@ const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ timeLogs, isDar
     const duration = Math.floor((endTime.getTime() - currentSession.startTime.getTime()) / 1000);
 
     try {
-      // TODO: Implement time log creation
-      console.log('Saving time log:', {
+      setIsLoading(true);
+      await taskService.createTimeLog(taskId, {
         description: currentSession.description,
-        startTime: currentSession.startTime,
-        endTime,
+        startTime: currentSession.startTime.toISOString(),
+        endTime: endTime.toISOString(),
         duration
       });
       
       setIsTracking(false);
       setCurrentSession(null);
+      onTimeLogsUpdate?.();
+      onShowWarning?.('Time log saved successfully', 'success');
     } catch (error) {
       console.error('Failed to save time log:', error);
+      onShowWarning?.('Failed to save time log', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -90,18 +131,105 @@ const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ timeLogs, isDar
     const endTime = new Date(manualLog.endTime);
     const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
+    if (duration <= 0) {
+      onShowWarning?.('End time must be after start time', 'error');
+      return;
+    }
+
     try {
-      // TODO: Implement manual time log creation
-      console.log('Adding manual time log:', {
-        ...manualLog,
+      setIsLoading(true);
+      await taskService.createTimeLog(taskId, {
+        description: manualLog.description,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
         duration
       });
       
       setManualLog({ description: '', startTime: '', endTime: '', duration: 0 });
       setIsAddingManual(false);
+      onTimeLogsUpdate?.();
+      onShowWarning?.('Time log added successfully', 'success');
     } catch (error) {
       console.error('Failed to add manual time log:', error);
+      onShowWarning?.('Failed to add time log', 'error');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const startEditTimeLog = (timeLog: TaskTimeLog) => {
+    setEditingLog(timeLog.id);
+    setEditLog({
+      description: timeLog.description || '',
+      startTime: new Date(timeLog.startTime).toISOString().slice(0, 16),
+      endTime: timeLog.endTime ? new Date(timeLog.endTime).toISOString().slice(0, 16) : '',
+      duration: timeLog.duration || 0
+    });
+  };
+
+  const cancelEditTimeLog = () => {
+    setEditingLog(null);
+    setEditLog({ description: '', startTime: '', endTime: '', duration: 0 });
+  };
+
+  const updateTimeLog = async (timeLogId: string) => {
+    if (!editLog.description || !editLog.startTime || !editLog.endTime) return;
+
+    const startTime = new Date(editLog.startTime);
+    const endTime = new Date(editLog.endTime);
+    const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+
+    if (duration <= 0) {
+      onShowWarning?.('End time must be after start time', 'error');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await taskService.updateTimeLog(taskId, timeLogId, {
+        description: editLog.description,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration
+      });
+      
+      setEditingLog(null);
+      setEditLog({ description: '', startTime: '', endTime: '', duration: 0 });
+      onTimeLogsUpdate?.();
+      onShowWarning?.('Time log updated successfully', 'success');
+    } catch (error) {
+      console.error('Failed to update time log:', error);
+      onShowWarning?.('Failed to update time log', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteTimeLog = (timeLogId: string) => {
+    if (!onShowConfirmation) {
+      console.error('onShowConfirmation not provided');
+      return;
+    }
+
+    onShowConfirmation(
+      'Delete Time Log',
+      'Are you sure you want to delete this time log? This action cannot be undone.',
+      async () => {
+        try {
+          setIsLoading(true);
+          await taskService.deleteTimeLog(taskId, timeLogId);
+          onTimeLogsUpdate?.();
+          onShowWarning?.('Time log deleted successfully', 'success');
+        } catch (error) {
+          console.error('Failed to delete time log:', error);
+          onShowWarning?.('Failed to delete time log', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      'Delete',
+      'Cancel'
+    );
   };
 
   const totalTime = calculateTotalTime();
@@ -294,46 +422,134 @@ const TaskDetailTimeLogs: React.FC<TaskDetailTimeLogsProps> = ({ timeLogs, isDar
                 isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-0.5">
-                  {timeLog.endTime ? (
-                    <LucideSquare className="w-4 h-4 text-gray-500" />
-                  ) : (
-                    <LucidePlay className="w-4 h-4 text-green-500" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className={`text-sm font-medium mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    {timeLog.description || 'Time tracking session'}
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              {editingLog === timeLog.id ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={editLog.description}
+                    onChange={(e) => setEditLog({ ...editLog, description: e.target.value })}
+                    placeholder="Description..."
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand ${
+                      isDarkMode
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                    }`}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Started:
-                      </span>
-                      <span className={`ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {new Date(timeLog.startTime).toLocaleString()}
-                      </span>
+                      <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Start Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={editLog.startTime}
+                        onChange={(e) => setEditLog({ ...editLog, startTime: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand ${
+                          isDarkMode
+                            ? 'bg-gray-700 border-gray-600 text-white'
+                            : 'bg-white border-gray-300 text-gray-900'
+                        }`}
+                      />
                     </div>
                     <div>
-                      <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Duration:
-                      </span>
-                      <span className={`ml-1 font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                        {formatDuration(timeLog.duration)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        By:
-                      </span>
-                      <span className={`ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {timeLog.userId}
-                      </span>
+                      <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        End Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={editLog.endTime}
+                        onChange={(e) => setEditLog({ ...editLog, endTime: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand ${
+                          isDarkMode
+                            ? 'bg-gray-700 border-gray-600 text-white'
+                            : 'bg-white border-gray-300 text-gray-900'
+                        }`}
+                      />
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      onClick={() => updateTimeLog(timeLog.id)}
+                      disabled={!editLog.description || !editLog.startTime || !editLog.endTime || isLoading}
+                      size="sm"
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={cancelEditTimeLog}
+                      disabled={isLoading}
+                      size="sm"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {timeLog.endTime ? (
+                      <LucideSquare className="w-4 h-4 text-gray-500" />
+                    ) : (
+                      <LucidePlay className="w-4 h-4 text-green-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`text-sm font-medium mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {timeLog.description || 'Time tracking session'}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Started:
+                        </span>
+                        <span className={`ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {new Date(timeLog.startTime).toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Duration:
+                        </span>
+                        <span className={`ml-1 font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {formatDuration(timeLog.duration)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={`font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          By:
+                        </span>
+                        <span className={`ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {userProfiles[timeLog.userId] 
+                            ? `${userProfiles[timeLog.userId].firstName} ${userProfiles[timeLog.userId].lastName}`
+                            : timeLog.userId
+                          }
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => startEditTimeLog(timeLog)}
+                      disabled={isLoading}
+                      className="p-1 h-8 w-8"
+                    >
+                      <LucideEdit className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteTimeLog(timeLog.id)}
+                      disabled={isLoading}
+                      className="p-1 h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <LucideTrash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}

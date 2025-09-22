@@ -1,4 +1,5 @@
 const FirestoreService = require('../services/firestoreService');
+const Facility = require('./Facility');
 
 class UserFacility extends FirestoreService {
   constructor() {
@@ -39,7 +40,18 @@ class UserFacility extends FirestoreService {
       updatedAt: new Date()
     };
 
-    return this.create(data);
+    // Create the user-facility relationship
+    const relationship = await this.create(data);
+
+    // Also add the user to the facility's members array
+    try {
+      await Facility.addMember(facilityId, userId);
+    } catch (facilityError) {
+      console.error('Error updating facility members array:', facilityError);
+      // Don't fail the operation if facility update fails
+    }
+
+    return relationship;
   }
 
   // Update user role in facility
@@ -59,7 +71,17 @@ class UserFacility extends FirestoreService {
       throw new Error('User is not a member of this facility');
     }
 
+    // Delete the user-facility relationship
     await this.delete(relationships[0].id);
+
+    // Also remove the user from the facility's members array
+    try {
+      await Facility.removeMember(facilityId, userId);
+    } catch (facilityError) {
+      console.error('Error updating facility members array:', facilityError);
+      // Don't fail the operation if facility update fails
+    }
+
     return true;
   }
 

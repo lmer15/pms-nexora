@@ -484,7 +484,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                   placeholder="Search by email or name..."
                   value={emailOrName}
                   onChange={handleSearchChange}
-                  className="flex-grow pr-8"
+                  className={`flex-grow pr-8 ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : ''}`}
                   disabled={isLoading}
                 />
                 {isSearching && (

@@ -5,7 +5,9 @@ const {
   getCommentsByTask,
   createComment,
   updateComment,
-  deleteComment
+  deleteComment,
+  likeComment,
+  dislikeComment
 } = require('../controllers/taskCommentController');
 
 router.use(authMiddleware);
@@ -14,5 +16,7 @@ router.get('/', getCommentsByTask);
 router.post('/', createComment);
 router.put('/:commentId', updateComment);
 router.delete('/:commentId', deleteComment);
+router.post('/:commentId/like', likeComment);
+router.post('/:commentId/dislike', dislikeComment);
 
 module.exports = router;

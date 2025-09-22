@@ -6,7 +6,8 @@ export interface Task {
   title: string;
   description?: string;
   status: 'todo' | 'in-progress' | 'review' | 'done';
-  assignee?: string;
+  assignee?: string; // Keep for backward compatibility
+  assignees?: string[]; // New field for multiple assignees
   dueDate?: string;
   projectId: string;
   creatorId: string;
@@ -24,7 +25,8 @@ export interface CreateTaskData {
   title: string;
   description?: string;
   status?: 'todo' | 'in-progress' | 'review' | 'done';
-  assignee?: string;
+  assignee?: string; // Keep for backward compatibility
+  assignees?: string[]; // New field for multiple assignees
   dueDate?: string;
   projectId: string;
   startDate?: string;
@@ -39,6 +41,15 @@ export interface TaskComment {
   id: string;
   content: string;
   creatorId: string;
+  parentCommentId?: string; // For replies
+  likes: string[]; // Array of user IDs who liked
+  dislikes: string[]; // Array of user IDs who disliked
+  replies?: TaskComment[]; // Array of reply comments
+  formatting?: {
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+  };
   createdAt: string;
   updatedAt: string;
   userProfile?: {
@@ -67,6 +78,18 @@ export interface TaskDependency {
   description?: string;
   creatorId: string;
   createdAt: string;
+  dependentTask?: {
+    id: string;
+    title: string;
+    status: 'todo' | 'in-progress' | 'review' | 'done';
+    projectId: string;
+  };
+  creatorProfile?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
 }
 
 export interface TaskSubtask {
@@ -96,6 +119,7 @@ export interface TaskActivityLog {
   details?: string;
   userId: string;
   timestamp: string;
+  metadata?: any;
 }
 
 export interface TaskDetails {
@@ -162,18 +186,35 @@ const taskService = {
     return response.data;
   },
 
-  createComment: async (taskId: string, commentData: { content: string }): Promise<TaskComment> => {
+  createComment: async (taskId: string, commentData: { 
+    content: string; 
+    parentCommentId?: string; 
+    formatting?: { bold?: boolean; italic?: boolean; underline?: boolean; }
+  }): Promise<TaskComment> => {
     const response = await api.post(`/tasks/${taskId}/comments`, commentData);
     return response.data;
   },
 
-  updateComment: async (taskId: string, commentId: string, commentData: { content: string }): Promise<TaskComment> => {
+  updateComment: async (taskId: string, commentId: string, commentData: { 
+    content: string; 
+    formatting?: { bold?: boolean; italic?: boolean; underline?: boolean; }
+  }): Promise<TaskComment> => {
     const response = await api.put(`/tasks/${taskId}/comments/${commentId}`, commentData);
     return response.data;
   },
 
   deleteComment: async (taskId: string, commentId: string): Promise<void> => {
     await api.delete(`/tasks/${taskId}/comments/${commentId}`);
+  },
+
+  likeComment: async (taskId: string, commentId: string): Promise<{ likes: string[]; dislikes: string[] }> => {
+    const response = await api.post(`/tasks/${taskId}/comments/${commentId}/like`);
+    return response.data;
+  },
+
+  dislikeComment: async (taskId: string, commentId: string): Promise<{ likes: string[]; dislikes: string[] }> => {
+    const response = await api.post(`/tasks/${taskId}/comments/${commentId}/dislike`);
+    return response.data;
   },
 
   // Attachments
@@ -217,6 +258,11 @@ const taskService = {
 
   deleteDependency: async (taskId: string, dependencyId: string): Promise<void> => {
     await api.delete(`/tasks/${taskId}/dependencies/${dependencyId}`);
+  },
+
+  searchTasksForDependency: async (taskId: string, query: string, limit: number = 10): Promise<Array<{ id: string; title: string; status: string; projectId: string }>> => {
+    const response = await api.get(`/tasks/${taskId}/dependencies/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    return response.data;
   },
 
   // Subtasks

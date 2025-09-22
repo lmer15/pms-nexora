@@ -4,12 +4,14 @@ const authMiddleware = require('../middleware/authMiddleware');
 const {
   getDependenciesByTask,
   createDependency,
-  deleteDependency
+  deleteDependency,
+  searchTasks
 } = require('../controllers/taskDependencyController');
 
 router.use(authMiddleware);
 
 router.get('/', getDependenciesByTask);
+router.get('/search', searchTasks);
 router.post('/', createDependency);
 router.delete('/:dependencyId', deleteDependency);
 

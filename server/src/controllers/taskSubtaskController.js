@@ -48,7 +48,7 @@ exports.createSubtask = async (req, res) => {
   try {
     const creatorId = req.userId;
     const { taskId } = req.params;
-    const { title, description, isCompleted } = req.body;
+    const { title, description, completed } = req.body;
 
     // Validate input
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -73,7 +73,7 @@ exports.createSubtask = async (req, res) => {
     const subtaskData = {
       title: title.trim(),
       description: description ? description.trim() : null,
-      isCompleted: isCompleted || false
+      completed: completed || false
     };
 
     const subtask = await TaskSubtask.createSubtask(subtaskData, taskId, creatorId);
@@ -92,7 +92,7 @@ exports.updateSubtask = async (req, res) => {
   try {
     const userId = req.userId;
     const { subtaskId } = req.params;
-    const { title, description, isCompleted } = req.body;
+    const { title, description, completed } = req.body;
 
     // Validate input
     if (title !== undefined) {
@@ -124,7 +124,7 @@ exports.updateSubtask = async (req, res) => {
     const updateData = {};
     if (title !== undefined) updateData.title = title.trim();
     if (description !== undefined) updateData.description = description ? description.trim() : null;
-    if (isCompleted !== undefined) updateData.isCompleted = isCompleted;
+    if (completed !== undefined) updateData.completed = completed;
 
     const updatedSubtask = await TaskSubtask.updateSubtask(subtaskId, updateData);
     if (!updatedSubtask) {
@@ -132,8 +132,8 @@ exports.updateSubtask = async (req, res) => {
     }
 
     // Log activity based on changes
-    if (isCompleted !== undefined && isCompleted !== subtask.isCompleted) {
-      if (isCompleted) {
+    if (completed !== undefined && completed !== subtask.completed) {
+      if (completed) {
         await ActivityLoggerService.logSubtaskCompleted(subtask.taskId, userId, subtask.title);
       } else {
         await ActivityLoggerService.logSubtaskUncompleted(subtask.taskId, userId, subtask.title);

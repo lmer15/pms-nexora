@@ -10,6 +10,7 @@ const facilityShareRoutes = require('./routes/facilityShareRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const noteRoutes = require('./routes/noteRoutes');
+const timeLogRoutes = require('./routes/timeLogRoutes');
 const { downloadAttachment } = require('./controllers/taskAttachmentController');
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/facilities', facilityShareRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/timeLogs', timeLogRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

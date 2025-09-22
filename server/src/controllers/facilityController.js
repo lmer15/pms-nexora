@@ -4,6 +4,15 @@ const User = require('../models/User');
 const FacilityInvitation = require('../models/FacilityInvitation');
 const FacilityShareLink = require('../models/FacilityShareLink');
 const FacilityJoinRequest = require('../models/FacilityJoinRequest');
+const Project = require('../models/Project');
+const Task = require('../models/Task');
+const TaskComment = require('../models/TaskComment');
+const TaskAttachment = require('../models/TaskAttachment');
+const TaskDependency = require('../models/TaskDependency');
+const TaskSubtask = require('../models/TaskSubtask');
+const TaskTimeLog = require('../models/TaskTimeLog');
+const TaskActivityLog = require('../models/TaskActivityLog');
+const Note = require('../models/Note');
 const { sendFacilityInvitationEmail, sendFacilityInvitationToExistingUser } = require('../services/emailService');
 
 exports.getFacilities = async (req, res) => {
@@ -86,11 +95,158 @@ exports.updateFacility = async (req, res) => {
 
 exports.deleteFacility = async (req, res) => {
   try {
-    const deleted = await Facility.delete(req.params.id);
+    const facilityId = req.params.id;
+    
+    // Check if facility exists and user is the owner
+    const facility = await Facility.findById(facilityId);
+    if (!facility) {
+      return res.status(404).json({ message: 'Facility not found' });
+    }
+    
+    if (facility.ownerId !== req.userId) {
+      return res.status(403).json({ message: 'Only the facility owner can delete the facility' });
+    }
+
+    console.log(`Starting cascading delete for facility: ${facilityId}`);
+
+    // Get all projects in this facility
+    const projects = await Project.findByFacility(facilityId);
+    console.log(`Found ${projects.length} projects in facility ${facilityId}`);
+
+    // Delete all tasks and their related data for each project
+    const taskDeletePromises = projects.map(async (project) => {
+      const tasks = await Task.findByProject(project.id);
+      console.log(`Found ${tasks.length} tasks in project ${project.id}`);
+      
+      return Promise.all(tasks.map(async (task) => {
+        // Delete all task-related data
+        const taskDeletePromises = [
+          // Delete task comments
+          TaskComment.findByTask(task.id).then(comments => {
+            if (comments && comments.length > 0) {
+              return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
+            }
+            return [];
+          }),
+          
+          // Delete task attachments
+          TaskAttachment.findByTask(task.id).then(attachments => {
+            if (attachments && attachments.length > 0) {
+              return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
+            }
+            return [];
+          }),
+          
+          // Delete task dependencies
+          TaskDependency.findByTask(task.id).then(dependencies => {
+            if (dependencies && dependencies.length > 0) {
+              return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
+            }
+            return [];
+          }),
+          
+          // Delete task subtasks
+          TaskSubtask.findByTask(task.id).then(subtasks => {
+            if (subtasks && subtasks.length > 0) {
+              return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
+            }
+            return [];
+          }),
+          
+          // Delete task time logs
+          TaskTimeLog.findByTask(task.id).then(timeLogs => {
+            if (timeLogs && timeLogs.length > 0) {
+              return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
+            }
+            return [];
+          }),
+          
+          // Delete task activity logs
+          TaskActivityLog.findByTask(task.id).then(activityLogs => {
+            if (activityLogs && activityLogs.length > 0) {
+              return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
+            }
+            return [];
+          })
+        ];
+
+        // Wait for all task-related data to be deleted
+        await Promise.all(taskDeletePromises);
+        
+        // Delete the task itself
+        return Task.delete(task.id);
+      }));
+    });
+
+    // Wait for all tasks to be deleted
+    await Promise.all(taskDeletePromises);
+    console.log(`All tasks deleted for facility ${facilityId}`);
+
+    // Delete all projects in the facility
+    const projectDeletePromises = projects.map(project => Project.delete(project.id));
+    await Promise.all(projectDeletePromises);
+    console.log(`All projects deleted for facility ${facilityId}`);
+
+    // Delete all facility-related data
+    const facilityDeletePromises = [
+      // Delete user-facility relationships
+      UserFacility.findByFacility(facilityId).then(relationships => {
+        if (relationships && relationships.length > 0) {
+          console.log(`Deleting ${relationships.length} user-facility relationships for facility ${facilityId}`);
+          return Promise.all(relationships.map(relationship => UserFacility.delete(relationship.id)));
+        }
+        return [];
+      }),
+      
+      // Delete facility invitations
+      FacilityInvitation.findByFacility(facilityId).then(invitations => {
+        if (invitations && invitations.length > 0) {
+          console.log(`Deleting ${invitations.length} facility invitations for facility ${facilityId}`);
+          return Promise.all(invitations.map(invitation => FacilityInvitation.delete(invitation.id)));
+        }
+        return [];
+      }),
+      
+      // Delete facility share links
+      FacilityShareLink.findByFacility(facilityId).then(shareLinks => {
+        if (shareLinks && shareLinks.length > 0) {
+          console.log(`Deleting ${shareLinks.length} facility share links for facility ${facilityId}`);
+          return Promise.all(shareLinks.map(shareLink => FacilityShareLink.delete(shareLink.id)));
+        }
+        return [];
+      }),
+      
+      // Delete facility join requests
+      FacilityJoinRequest.findByFacility(facilityId).then(joinRequests => {
+        if (joinRequests && joinRequests.length > 0) {
+          console.log(`Deleting ${joinRequests.length} facility join requests for facility ${facilityId}`);
+          return Promise.all(joinRequests.map(joinRequest => FacilityJoinRequest.delete(joinRequest.id)));
+        }
+        return [];
+      }),
+      
+      // Delete facility notes
+      Note.findByFacility(facilityId).then(notes => {
+        if (notes && notes.length > 0) {
+          console.log(`Deleting ${notes.length} facility notes for facility ${facilityId}`);
+          return Promise.all(notes.map(note => Note.delete(note.id)));
+        }
+        return [];
+      })
+    ];
+
+    // Wait for all facility-related data to be deleted
+    await Promise.all(facilityDeletePromises);
+    console.log(`All facility-related data deleted for facility ${facilityId}`);
+
+    // Finally delete the facility itself
+    const deleted = await Facility.delete(facilityId);
     if (!deleted) {
       return res.status(404).json({ message: 'Facility not found' });
     }
-    res.json({ message: 'Facility deleted successfully' });
+
+    console.log(`Facility ${facilityId} deleted successfully`);
+    res.json({ message: 'Facility and all related data deleted successfully' });
   } catch (error) {
     console.error('Error deleting facility:', error);
     res.status(500).json({ message: 'Server error deleting facility' });

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LucideMessageSquare, LucideSend, LucideSmile, LucideMoreVertical, LucideEdit, LucideTrash2, LucideCheck, LucideX } from 'lucide-react';
+import { LucideMessageSquare, LucideSend, LucideSmile, LucideMoreVertical, LucideEdit, LucideTrash2, LucideCheck, LucideX, LucideBold, LucideItalic, LucideUnderline, LucidePaperclip, LucideAtSign, LucideLink, LucideThumbsUp, LucideThumbsDown, LucideReply, LucideChevronDown } from 'lucide-react';
 import { Picker } from 'emoji-mart';
 import { TaskComment } from '../../api/taskService';
 import { Button } from '../ui/button';
@@ -30,12 +30,56 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
   const [isUpdating, setIsUpdating] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'recent' | 'oldest'>('recent');
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
 
 
   // Sync local comments with realtime comments
   useEffect(() => {
     setComments(realtimeComments);
   }, [realtimeComments]);
+
+  // Fetch available users for mentions (task assignees)
+  useEffect(() => {
+    const fetchAvailableUsers = async () => {
+      try {
+        // Fetch task details to get assignee IDs
+        const taskDetails = await taskService.getById(taskId);
+        if (taskDetails?.assignees && taskDetails.assignees.length > 0) {
+          const userProfiles = await taskService.fetchUserProfilesByIds(taskDetails.assignees);
+          // Convert Record to array and filter out the current user
+          const filteredUsers = Object.entries(userProfiles)
+            .filter(([userId]) => userId !== user?.uid)
+            .map(([userId, profile]) => ({ id: userId, ...profile }));
+          setAvailableUsers(filteredUsers);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profiles for mentions:', error);
+      }
+    };
+
+    fetchAvailableUsers();
+  }, [taskId, user?.uid]);
+
+  // Close mention dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showMentionDropdown) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('[data-mention-dropdown]')) {
+          setShowMentionDropdown(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMentionDropdown]);
 
   // Reset active dropdown when comments change
   useEffect(() => {
@@ -54,13 +98,21 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    const contentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    const content = contentEditable?.innerHTML || '';
+    
+    if (!content.trim()) return;
 
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await taskService.createComment(taskId, { content: newComment.trim() });
+      await taskService.createComment(taskId, { 
+        content: content.trim()
+      });
       setNewComment('');
+      if (contentEditable) {
+        contentEditable.innerHTML = '';
+      }
       onShowWarning?.('Comment added successfully', 'success');
     } catch (err) {
       console.error('Failed to add comment:', err);
@@ -126,6 +178,249 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
     }
   };
 
+  // Handle reply functionality - trigger @mention
+  const handleReply = (commentId: string, commenterName: string) => {
+    // Find the comment to get the commenter's name
+    const comment = comments.find(c => c.id === commentId);
+    const commenterDisplayName = comment?.userProfile 
+      ? `${comment.userProfile.firstName} ${comment.userProfile.lastName}`.trim()
+      : commenterName;
+    
+    // Focus on the main comment input and add @mention
+    const mainContentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    if (mainContentEditable) {
+      mainContentEditable.focus();
+      
+      // Add @mention with green styling to the main comment input
+      const mentionHTML = `<span class="text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-1 py-0.5 rounded">@${commenterDisplayName}</span> `;
+      mainContentEditable.innerHTML += mentionHTML;
+      
+      // Update the state with plain text for storage
+      setNewComment(mainContentEditable.textContent || '');
+      
+      // Position cursor at the end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(mainContentEditable);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  };
+
+  // Handle @mention input detection
+  const handleMentionInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const text = target.textContent || '';
+    const cursorPosition = window.getSelection()?.getRangeAt(0).startOffset || 0;
+    
+    // Find the last @ symbol before cursor
+    const textBeforeCursor = text.substring(0, cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      // Check if there's no space after @ (meaning we're still typing the mention)
+      if (!textAfterAt.includes(' ')) {
+        setMentionQuery(textAfterAt);
+        
+        // Create a range to find the exact position of the @ symbol
+        const range = document.createRange();
+        const textNode = target.firstChild;
+        
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+          // Set range to the @ symbol position
+          range.setStart(textNode, lastAtIndex);
+          range.setEnd(textNode, lastAtIndex + 1);
+          
+          const rect = range.getBoundingClientRect();
+          const inputRect = target.getBoundingClientRect();
+          
+          // Position dropdown right next to the @ symbol
+          setMentionPosition({
+            top: inputRect.top + window.scrollY - 5, // Position above the input field
+            left: rect.left + window.scrollX // Align with the @ symbol
+          });
+        }
+        
+        setShowMentionDropdown(true);
+        return;
+      }
+    }
+    
+    setShowMentionDropdown(false);
+  };
+
+  // Handle mention selection
+  const handleMentionSelect = (selectedUser: any) => {
+    const mainContentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    if (mainContentEditable) {
+      const text = mainContentEditable.textContent || '';
+      const cursorPosition = window.getSelection()?.getRangeAt(0).startOffset || 0;
+      
+      // Find the last @ symbol before cursor
+      const textBeforeCursor = text.substring(0, cursorPosition);
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      
+      if (lastAtIndex !== -1) {
+        // Replace the @query with the selected user mention
+        const beforeAt = text.substring(0, lastAtIndex);
+        const afterCursor = text.substring(cursorPosition);
+        const mentionText = `@${selectedUser.firstName} ${selectedUser.lastName}`;
+        
+        // Update the content with green styling
+        const mentionHTML = `<span class="text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-1 py-0.5 rounded">${mentionText}</span>`;
+        const newHTML = beforeAt + mentionHTML + ' ' + afterCursor;
+        mainContentEditable.innerHTML = newHTML;
+        
+        // Update state
+        setNewComment(mainContentEditable.textContent || '');
+        
+        // Position cursor after the mention
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.setStart(mainContentEditable.firstChild || mainContentEditable, beforeAt.length + mentionText.length + 1);
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    }
+    
+    setShowMentionDropdown(false);
+    setMentionQuery('');
+  };
+
+
+  // Handle like/dislike functionality
+  const handleLike = async (commentId: string) => {
+    try {
+      const result = await taskService.likeComment(taskId, commentId);
+      // Update local state with new like/dislike counts
+      setComments(prev => prev.map(comment => 
+        comment.id === commentId 
+          ? { ...comment, likes: result.likes, dislikes: result.dislikes }
+          : comment
+      ));
+    } catch (err) {
+      console.error('Failed to like comment:', err);
+      onShowWarning?.('Failed to like comment. Please try again.', 'error');
+    }
+  };
+
+  const handleDislike = async (commentId: string) => {
+    try {
+      const result = await taskService.dislikeComment(taskId, commentId);
+      // Update local state with new like/dislike counts
+      setComments(prev => prev.map(comment => 
+        comment.id === commentId 
+          ? { ...comment, likes: result.likes, dislikes: result.dislikes }
+          : comment
+      ));
+    } catch (err) {
+      console.error('Failed to dislike comment:', err);
+      onShowWarning?.('Failed to dislike comment. Please try again.', 'error');
+    }
+  };
+
+
+
+  // Apply formatting to selected text using contentEditable div
+  const applyFormattingToSelection = (type: 'bold' | 'italic' | 'underline') => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      
+      if (!range.collapsed) {
+        // Apply formatting to selected text
+        switch (type) {
+          case 'bold':
+            document.execCommand('bold', false);
+            break;
+          case 'italic':
+            document.execCommand('italic', false);
+            break;
+          case 'underline':
+            document.execCommand('underline', false);
+            break;
+        }
+      }
+    }
+  };
+
+  // Handle formatting button clicks for main comment
+  const handleFormattingClick = (type: 'bold' | 'italic' | 'underline') => {
+    const contentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    if (contentEditable) {
+      contentEditable.focus();
+      applyFormattingToSelection(type);
+    }
+  };
+
+  // Handle @ mention button click
+  const handleMentionClick = () => {
+    const contentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    if (contentEditable) {
+      contentEditable.focus();
+      
+      // Add @ symbol to trigger mention dropdown
+      const currentText = contentEditable.textContent || '';
+      const newText = currentText + '@';
+      contentEditable.textContent = newText;
+      
+      // Update state
+      setNewComment(newText);
+      
+      // Position cursor at the end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(contentEditable);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      
+      // Trigger mention input handler
+      const event = new Event('input', { bubbles: true });
+      contentEditable.dispatchEvent(event);
+    }
+  };
+
+  // Handle link button click
+  const handleLinkClick = () => {
+    const contentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
+    if (contentEditable) {
+      contentEditable.focus();
+      
+      // Add link placeholder
+      const currentText = contentEditable.textContent || '';
+      const newText = currentText + '[Link text](https://example.com)';
+      contentEditable.textContent = newText;
+      
+      // Update state
+      setNewComment(newText);
+      
+      // Position cursor at the end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(contentEditable);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  };
+
+  // Render formatted text with @mention highlighting
+  const renderFormattedText = (content: string) => {
+    if (!content) return content;
+    
+    // Process @mentions to add green styling
+    const processedContent = content.replace(
+      /@(\w+(?:\s+\w+)*)/g, 
+      '<span class="text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-1 py-0.5 rounded">@$1</span>'
+    );
+    
+    return <span dangerouslySetInnerHTML={{ __html: processedContent }} />;
+  };
+
 
 
   const formatTimeAgo = (dateString: string) => {
@@ -161,17 +456,30 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
     <div className="p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-          <LucideMessageSquare className="w-5 h-5" />
+        <h3 className={`text-lg font-bold flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
           <span>Comments</span>
           {comments.length > 0 && (
             <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-              isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-800'
+              isDarkMode ? 'bg-green-900 text-green-100' : 'bg-green-100 text-green-800'
             }`}>
               {comments.length}
             </span>
           )}
         </h3>
+        <div className="flex items-center gap-2">
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as 'recent' | 'oldest')}
+            className={`text-sm border rounded px-2 py-1 ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-600 text-white' 
+                : 'bg-white border-gray-300 text-gray-700'
+            }`}
+          >
+            <option value="recent">Most recent</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
       </div>
 
       {/* Comments List */}
@@ -216,53 +524,13 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
                       </span>
                     </div>
 
-                    {user && comment.creatorId && (
-                      <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleDropdown(comment.id);
-                          }}
-                          className={`p-1 rounded-full hover:bg-opacity-20 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-300'}`}
-                        >
-                          <LucideMoreVertical className="w-4 h-4" />
-                        </button>
-
-                        {activeDropdown === comment.id && (
-                          <div onClick={(e) => e.stopPropagation()} className={`absolute right-0 top-6 z-10 py-1 rounded-md shadow-lg border ${
-                            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                          }`}>
-                            <button
-                              key={`edit-${comment.id}`}
-                              onClick={() => handleEditComment(comment.id, comment.content)}
-                              className={`flex items-center w-full px-3 py-2 text-sm hover:bg-opacity-20 ${
-                                isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              <LucideEdit className="w-4 h-4 mr-2" />
-                              Edit
-                            </button>
-                            <button
-                              key={`delete-${comment.id}`}
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className={`flex items-center w-full px-3 py-2 text-sm hover:bg-opacity-20 ${
-                                isDarkMode ? 'hover:bg-red-900 text-red-300' : 'hover:bg-red-100 text-red-700'
-                              }`}
-                            >
-                              <LucideTrash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                   {editingCommentId === comment.id ? (
                     <div onClick={(e) => e.stopPropagation()} className="space-y-2">
                       <textarea
                         value={editingContent}
                         onChange={(e) => setEditingContent(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${
+                        className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${
                           isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                         }`}
                         rows={3}
@@ -279,9 +547,48 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
                       </div>
                     </div>
                   ) : (
-                    <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {comment.content}
-                    </p>
+                    <>
+                      <div className={`text-sm leading-relaxed mb-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {renderFormattedText(comment.content)}
+                      </div>
+                      
+                      {/* Comment Interactions */}
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => handleLike(comment.id)}
+                          className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+                            comment.likes?.includes(user?.uid || '') 
+                              ? (isDarkMode ? 'text-green-400' : 'text-green-600')
+                              : (isDarkMode ? 'text-gray-400' : 'text-gray-600')
+                          }`}
+                        >
+                          <LucideThumbsUp className="w-3 h-3" />
+                          <span>{comment.likes?.length || 0}</span>
+                        </button>
+                        <button
+                          onClick={() => handleDislike(comment.id)}
+                          className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+                            comment.dislikes?.includes(user?.uid || '') 
+                              ? (isDarkMode ? 'text-red-400' : 'text-red-600')
+                              : (isDarkMode ? 'text-gray-400' : 'text-gray-600')
+                          }`}
+                        >
+                          <LucideThumbsDown className="w-3 h-3" />
+                          <span>{comment.dislikes?.length || 0}</span>
+                        </button>
+                        <button
+                          onClick={() => handleReply(comment.id, comment.userProfile ? `${comment.userProfile.firstName} ${comment.userProfile.lastName}`.trim() : comment.creatorId)}
+                          className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}
+                        >
+                          <LucideReply className="w-3 h-3" />
+                          <span>Reply</span>
+                        </button>
+                      </div>
+
+
+                    </>
                   )}
                 </div>
               </div>
@@ -297,29 +604,106 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
       }`}>
         <div className="space-y-3">
           <div className="relative">
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Write a comment..."
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all ${
+            <div
+              contentEditable
+              onInput={(e) => {
+                setNewComment(e.currentTarget.textContent || '');
+                handleMentionInput(e);
+              }}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none transition-all min-h-[80px] ${
                 isDarkMode
-                  ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400'
-                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                  ? 'bg-gray-800 border-gray-600 text-white'
+                  : 'bg-white border-gray-300 text-gray-900'
               }`}
-              rows={3}
+              style={{ 
+                minHeight: '80px',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word'
+              }}
+              data-placeholder="Add comment..."
+              suppressContentEditableWarning={true}
             />
+            {!newComment && (
+              <div 
+                className={`absolute top-3 left-4 pointer-events-none ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}
+              >
+                Add comment...
+              </div>
+            )}
           </div>
+          
+          {/* Formatting Toolbar */}
           <div className="flex items-center justify-between">
-            <div className="relative flex items-center gap-2">
-              {/* Emoji picker removed due to compatibility issues */}
+            <div className="flex items-center gap-2">
+              {/* Formatting buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleFormattingClick('bold')}
+                  className={`p-2 rounded hover:bg-opacity-20 ${
+                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title="Bold (select text and click)"
+                >
+                  <LucideBold className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFormattingClick('italic')}
+                  className={`p-2 rounded hover:bg-opacity-20 ${
+                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title="Italic (select text and click)"
+                >
+                  <LucideItalic className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFormattingClick('underline')}
+                  className={`p-2 rounded hover:bg-opacity-20 ${
+                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title="Underline (select text and click)"
+                >
+                  <LucideUnderline className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMentionClick()}
+                  className={`p-2 rounded hover:bg-opacity-20 ${
+                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title="Mention someone"
+                >
+                  <LucideAtSign className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLinkClick()}
+                  className={`p-2 rounded hover:bg-opacity-20 ${
+                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title="Add link"
+                >
+                  <LucideLink className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-1">
+                {/* @ and Link icons moved to formatting buttons section above */}
+              </div>
             </div>
+            
             <Button
               type="submit"
               disabled={isSubmitting || !newComment.trim()}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+              className="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white"
             >
               <LucideSend className="w-4 h-4" />
-              <span>{isSubmitting ? 'Posting...' : 'Post Comment'}</span>
+              <span>{isSubmitting ? 'Posting...' : 'Submit'}</span>
             </Button>
           </div>
         </div>
@@ -335,6 +719,76 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
         onCancel={() => setShowDeleteConfirm(false)}
         variant="danger"
       />
+
+      {/* Mention Dropdown */}
+      {showMentionDropdown && availableUsers.length > 0 && (
+        <>
+          <style>
+            {`
+              [data-mention-dropdown]::-webkit-scrollbar {
+                display: none;
+              }
+            `}
+          </style>
+          <div
+            data-mention-dropdown
+            className={`fixed z-50 w-64 max-h-48 overflow-y-auto border rounded-lg shadow-xl ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-600' 
+                : 'bg-white border-gray-300'
+            }`}
+            style={{
+              top: mentionPosition.top,
+              left: mentionPosition.left,
+              transform: 'translateY(-100%)', // Position above the @ symbol
+              scrollbarWidth: 'none', // Firefox
+              msOverflowStyle: 'none', // IE/Edge
+            }}
+          >
+          {/* Arrow pointing down */}
+          <div 
+            className={`absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent ${
+              isDarkMode ? 'border-t-gray-800' : 'border-t-white'
+            }`}
+            style={{ borderLeftColor: 'transparent', borderRightColor: 'transparent' }}
+          />
+          {availableUsers
+            .filter(user => 
+              `${user.firstName} ${user.lastName}`.toLowerCase().includes(mentionQuery.toLowerCase())
+            )
+            .map((user) => (
+              <button
+                key={user.id}
+                onClick={() => handleMentionSelect(user)}
+                className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ${
+                  isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+                }`}>
+                  {user.profilePicture ? (
+                    <img
+                      src={user.profilePicture}
+                      alt={`${user.firstName} ${user.lastName}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {user.firstName?.charAt(0)?.toUpperCase() || 'U'}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    {user.firstName} {user.lastName}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };

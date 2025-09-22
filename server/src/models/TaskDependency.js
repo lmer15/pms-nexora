@@ -15,7 +15,9 @@ class TaskDependency extends FirestoreService {
 
   async createDependency(dependencyData, taskId, creatorId) {
     const data = {
-      ...dependencyData,
+      dependencyId: dependencyData.dependencyId,
+      dependencyType: dependencyData.dependencyType,
+      description: dependencyData.description || '',
       taskId,
       creatorId,
       createdAt: new Date(),

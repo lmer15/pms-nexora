@@ -1,4 +1,4 @@
-import React, { useState, MouseEvent, KeyboardEvent } from 'react';
+import React, { useState, MouseEvent, KeyboardEvent, useEffect, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Card, Button } from '../../../components/ui';
 import { Task } from '../types';
+import { taskService } from '../../../api/taskService';
 
 interface TaskCardProps {
   task: Task;
@@ -39,6 +40,50 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [dragStarted, setDragStarted] = useState(false);
   const [justDragged, setJustDragged] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [currentTask, setCurrentTask] = useState(task);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Update current task when prop changes (real-time updates)
+  useEffect(() => {
+    // Check if task has actually changed
+    if (JSON.stringify(task) !== JSON.stringify(currentTask)) {
+      setIsUpdating(true);
+      setCurrentTask(task);
+      
+      // Reset updating state after a short delay
+      setTimeout(() => {
+        setIsUpdating(false);
+      }, 500);
+    }
+  }, [task, currentTask]);
+
+  // Fetch all assignee profiles when task changes
+  useEffect(() => {
+    const fetchAllAssigneeProfiles = async () => {
+      const taskAny = currentTask as any;
+      const assigneeIds = taskAny.assigneeIds || [];
+      
+      if (assigneeIds.length > 0) {
+        setLoadingProfiles(true);
+        try {
+          const profiles = await taskService.fetchUserProfilesByIds(assigneeIds);
+          setAssigneeProfiles(profiles || {});
+        } catch (error) {
+          console.error('Failed to fetch assignee profiles:', error);
+          setAssigneeProfiles({});
+        } finally {
+          setLoadingProfiles(false);
+        }
+      } else {
+        setAssigneeProfiles({});
+      }
+    };
+
+    fetchAllAssigneeProfiles();
+  }, [currentTask]);
 
   const {
     attributes,
@@ -49,6 +94,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     isDragging,
   } = useSortable({ id: task.id });
 
+  // Enhanced drag handlers to prevent modal conflicts
   const listeners = {
     ...defaultListeners,
     onPointerDown: (event: any) => {
@@ -61,9 +107,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
     onPointerUp: (event: any) => {
       setDragStarted(false);
       setJustDragged(true);
-      setTimeout(() => setJustDragged(false), 100);
+      setTimeout(() => setJustDragged(false), 300); // Increased timeout for better UX
       if (typeof (defaultListeners as any).onPointerUp === 'function') {
         (defaultListeners as any).onPointerUp(event);
+      }
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      // Allow space/enter to open modal when not dragging
+      if ((event.key === 'Enter' || event.key === ' ') && !isDragging) {
+        event.preventDefault();
+        handleOpenTaskDetail(currentTask.id);
+      }
+      if (typeof (defaultListeners as any).onKeyDown === 'function') {
+        (defaultListeners as any).onKeyDown(event);
       }
     },
   };
@@ -73,35 +129,60 @@ const TaskCard: React.FC<TaskCardProps> = ({
     transition,
   };
 
-  // Event Handlers
+  // Improved click handler with better event detection
   const handleTaskClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (
-      (e.target as HTMLElement).closest('button') ||
-      (e.target as HTMLElement).closest('input') ||
-      (e.target as HTMLElement).closest('a') ||
-      isDragging ||
-      justDragged
-    ) {
+    // Prevent opening modal during drag operations
+    if (isDragging || justDragged || dragStarted) {
       return;
     }
-    handleOpenTaskDetail(task.id);
+
+    // Check if click originated from interactive elements
+    const interactiveElements = [
+      'button', 'input', 'textarea', 'select', 'a', 
+      '[role="button"]', '[contenteditable="true"]'
+    ];
+    
+    const target = e.target as HTMLElement;
+    const isInteractiveElement = interactiveElements.some(selector => 
+      target.closest(selector)
+    );
+
+    if (isInteractiveElement) {
+      return;
+    }
+
+    handleOpenTaskDetail(currentTask.id);
   };
 
   const handleHeaderKeyDown = (e: KeyboardEvent<HTMLHeadingElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      handleOpenTaskDetail(task.id);
+      e.stopPropagation();
+      handleOpenTaskDetail(currentTask.id);
     }
   };
 
   const handleDeleteClick = (e: MouseEvent) => {
     e.stopPropagation();
-    handleDeleteTask(task.id, task.title, columnId);
+    e.preventDefault();
+    handleDeleteTask(currentTask.id, currentTask.title, columnId);
   };
 
   const openDetails = (e: MouseEvent) => {
     e.stopPropagation();
-    handleOpenTaskDetail(task.id);
+    e.preventDefault();
+    handleOpenTaskDetail(currentTask.id);
+  };
+
+  // Prevent quick actions from showing during drag
+  const handleMouseEnter = () => {
+    if (!isDragging) {
+      setShowQuickActions(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowQuickActions(false);
   };
 
   // Helper functions
@@ -134,18 +215,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   const getPriorityColor = (priority?: string) => {
-    switch (priority) {
-      case 'urgent':
-        return 'border-l-red-500';
-      case 'high':
-        return 'border-l-orange-500';
-      case 'medium':
-        return 'border-l-yellow-500';
-      case 'low':
-        return 'border-l-green-500';
-      default:
-        return 'border-l-gray-300 dark:border-l-gray-600';
-    }
+    // Remove priority border colors
+    return '';
   };
 
   const getStatusText = (status: string) => {
@@ -180,61 +251,78 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   return (
     <Card
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        if (node) {
+          (cardRef as any).current = node;
+        }
+      }}
       style={style}
       {...attributes}
       {...listeners}
-      role="listitem"
-      aria-label={`Task card: ${task.title}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Task: ${currentTask.title}. Status: ${getStatusText(currentTask.status)}. Click to view details.`}
       onClick={handleTaskClick}
-      onMouseEnter={() => setShowQuickActions(true)}
-      onMouseLeave={() => setShowQuickActions(false)}
-      className={`
-        group cursor-pointer transition-all duration-300 ease-out
-        border-l-4 ${getPriorityColor()}
-        ${isDragging ? 'opacity-60 rotate-2 scale-105 shadow-2xl' : ''}
-        ${isDarkMode 
-          ? 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:shadow-lg hover:shadow-gray-900/20' 
-          : 'bg-white border-gray-200 hover:bg-gray-50 hover:shadow-lg hover:shadow-gray-900/10'
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleOpenTaskDetail(currentTask.id);
         }
-        hover:-translate-y-1
-        focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
-        rounded-lg shadow-sm p-0 overflow-hidden
-      `}
+      }}
+        className={`
+          group cursor-pointer transition-all duration-200 ease-out
+          ${isDragging ? 'opacity-50 rotate-1 scale-105 shadow-xl z-50' : ''}
+          ${isUpdating ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}
+          ${isDarkMode 
+            ? 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:shadow-lg' 
+            : 'bg-white border-gray-200 hover:bg-gray-50 hover:shadow-lg'
+          }
+          hover:-translate-y-0.5
+          focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
+          rounded-lg shadow-sm p-0 overflow-hidden
+          mb-2
+          ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}
+        `}
     >
       {/* Card Content */}
       <div className="p-3">
         {/* Header with Status and Quick Actions */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColorClasses(task.status)}`}
-              aria-label={`Status: ${getStatusText(task.status)}`}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border ${getStatusColorClasses(currentTask.status)}`}
+              aria-label={`Status: ${getStatusText(currentTask.status)}`}
             >
-              {getStatusIcon(task.status)}
-              {getStatusText(task.status)}
+              {getStatusIcon(currentTask.status)}
+              {getStatusText(currentTask.status)}
             </span>
-
           </div>
           
-          {/* Quick Actions - Show on hover */}
-          <div className={`flex items-center gap-1 transition-opacity duration-200 ${showQuickActions ? 'opacity-100' : 'opacity-0'}`}>
-            <Button
-              onClick={openDetails}
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
-              aria-label="View details"
-            >
-              <LucideEye className="w-4 h-4" />
-            </Button>
+          {/* Quick Actions - Show on hover and when not dragging */}
+          <div className={`flex items-center gap-1 transition-all duration-200 ${
+            showQuickActions && !isDragging ? 'opacity-100' : 'opacity-0'
+          }`}>
+                    <Button
+                      onClick={openDetails}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-green-100 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400"
+                      aria-label={`View details for task: ${currentTask.title}`}
+                      onMouseDown={(e) => e.stopPropagation()} // Prevent drag start
+                    >
+                      <LucideEye className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    </Button>
             <Button
               onClick={handleDeleteClick}
               variant="ghost"
               size="sm"
               disabled={isDeleting}
-              className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 hover:text-red-600"
-              aria-label="Delete task"
+              className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
+              aria-label={`Delete task: ${currentTask.title}`}
+              onMouseDown={(e) => e.stopPropagation()} // Prevent drag start
             >
               <LucideTrash2 className="w-4 h-4" />
             </Button>
@@ -243,75 +331,146 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
         {/* Task Title */}
         <h4
-          className={`font-semibold text-sm leading-snug mb-1.5 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors truncate ${
+          className={`font-semibold text-sm leading-tight mb-3 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors line-clamp-2 ${
             isDarkMode ? 'text-white' : 'text-gray-900'
           }`}
-          tabIndex={0}
+          tabIndex={-1} // Remove from tab sequence since card is focusable
           onKeyDown={handleHeaderKeyDown}
-          aria-label={`Task title: ${task.title}`}
           role="heading"
           aria-level={4}
         >
-          {task.title}
+          {currentTask.title}
         </h4>
 
-        {/* Description */}
-        {task.description && (
-          <p 
-            className={`text-xs mb-2 leading-snug line-clamp-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}
-            aria-label="Task description"
-          >
-            {task.description}
-          </p>
-        )}
-
-        {/* Footer - Assignee and Task ID */}
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center gap-1.5">
-            {task.assignee ? (
-              <>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium ${
-                  isDarkMode ? 'bg-brand text-white' : 'bg-brand text-white'
-                }`}>
-                  {task.assignee.charAt(0).toUpperCase()}
+        {/* Footer: Assignee (Left) and Due Date (Right) */}
+        <div className="flex items-center justify-between">
+          {/* Assignee Profiles - Left Side (Overlapping) */}
+          <div className="flex items-center">
+            {(() => {
+              const taskAny = currentTask as any;
+              const assigneeIds = taskAny.assigneeIds || [];
+              const hasAssignees = assigneeIds.length > 0;
+              
+              if (!hasAssignees) {
+                return (
+                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                    isDarkMode 
+                      ? 'text-gray-400 bg-gray-700/50' 
+                      : 'text-gray-500 bg-gray-100'
+                  }`}>
+                    No assignee
+                  </span>
+                );
+              }
+              
+              if (loadingProfiles) {
+                return (
+                  <div className="flex items-center">
+                    {assigneeIds.slice(0, 5).map((_, index) => (
+                      <div 
+                        key={index} 
+                        className={`w-6 h-6 rounded-full flex items-center justify-center animate-pulse border-2 border-white dark:border-gray-800 ${
+                          isDarkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-300 text-gray-600'
+                        }`}
+                        style={{ 
+                          marginLeft: index > 0 ? '-8px' : '0',
+                          zIndex: 5 - index 
+                        }}
+                      >
+                        <LucideUser className="w-3 h-3" />
+                      </div>
+                    ))}
+                    {assigneeIds.length > 5 && (
+                      <div 
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium border-2 border-white dark:border-gray-800 ${
+                          isDarkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-300 text-gray-600'
+                        }`}
+                        style={{ 
+                          marginLeft: '-8px',
+                          zIndex: 0 
+                        }}
+                      >
+                        +{assigneeIds.length - 5}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              
+              // Display up to 5 assignees with overlapping
+              const maxVisible = 5;
+              const visibleAssignees = assigneeIds.slice(0, maxVisible);
+              const remainingCount = assigneeIds.length - maxVisible;
+              
+              return (
+                <div className="flex items-center">
+                  {visibleAssignees.map((assigneeId, index) => {
+                    const profile = assigneeProfiles[assigneeId];
+                    const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Unknown User';
+                    const initials = profile ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase() : '?';
+                    
+                    return (
+                      <div 
+                        key={assigneeId}
+                        className="w-6 h-6 rounded-full overflow-hidden bg-brand text-white flex items-center justify-center text-xs font-medium cursor-pointer border-2 border-white dark:border-gray-800"
+                        title={fullName}
+                        aria-label={`Assigned to: ${fullName}`}
+                        style={{ 
+                          marginLeft: index > 0 ? '-8px' : '0',
+                          zIndex: maxVisible - index 
+                        }}
+                      >
+                        {profile?.profilePicture ? (
+                          <img
+                            src={profile.profilePicture}
+                            alt={fullName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          initials
+                        )}
+                      </div>
+                    );
+                  })}
+                  
+                  {remainingCount > 0 && (
+                    <div 
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium bg-gray-500 text-white border-2 border-white dark:border-gray-800"
+                      title={`${remainingCount} more assignees`}
+                      aria-label={`${remainingCount} more assignees`}
+                      style={{ 
+                        marginLeft: '-8px',
+                        zIndex: 0 
+                      }}
+                    >
+                      +{remainingCount}
+                    </div>
+                  )}
                 </div>
-                <span 
-                  className={`text-xs font-medium truncate max-w-[80px] ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
-                  aria-label={`Assignee: ${task.assignee}`}
-                >
-                  {task.assignee}
-                </span>
-              </>
-            ) : (
-              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Unassigned
+              );
+            })()}
+          </div>
+
+          {/* Due Date - Right Side */}
+          <div className="flex items-center">
+            {(currentTask as any).dueDate && (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
+                  isOverdue((currentTask as any).dueDate)
+                    ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                    : getDaysUntilDue((currentTask as any).dueDate) <= 3
+                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                }`}
+                aria-label={`Due date: ${formatDueDate((currentTask as any).dueDate)}`}
+              >
+                <LucideCalendar className="w-3 h-3" />
+                {formatDueDate((currentTask as any).dueDate)}
               </span>
             )}
           </div>
-
-          {/* Due Date */}
-          {task.dueDate && (
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium rounded ${
-                isOverdue(task.dueDate)
-                  ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
-                  : getDaysUntilDue(task.dueDate) <= 3
-                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
-                  : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-              }`}
-              aria-label={`Due date: ${formatDueDate(task.dueDate)}`}
-            >
-              <LucideCalendar className="w-3 h-3" />
-              {formatDueDate(task.dueDate)}
-            </span>
-          )}
         </div>
       </div>
-
     </Card>
   );
 };

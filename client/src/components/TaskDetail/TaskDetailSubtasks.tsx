@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { LucideCheckSquare, LucideSquare, LucidePlus, LucideTrash2 } from 'lucide-react';
-import { TaskSubtask } from '../../api/taskService';
+import React, { useState, useRef, useEffect } from 'react';
+import { LucideCheckSquare, LucideSquare, LucidePlus, LucideTrash2, LucideEdit2, LucideCheck, LucideX } from 'lucide-react';
+import { TaskSubtask, taskService } from '../../api/taskService';
 import { Button } from '../ui/button';
 
 interface TaskDetailSubtasksProps {
@@ -9,24 +9,56 @@ interface TaskDetailSubtasksProps {
   isDarkMode: boolean;
   onShowWarning?: (message: string, type?: 'warning' | 'error' | 'success') => void;
   onShowConfirmation?: (title: string, message: string, onConfirm: () => void, confirmText?: string, cancelText?: string) => void;
+  onRefresh?: () => void;
 }
 
-const TaskDetailSubtasks: React.FC<TaskDetailSubtasksProps> = ({ subtasks, taskId, isDarkMode }) => {
+const TaskDetailSubtasks: React.FC<TaskDetailSubtasksProps> = ({ 
+  subtasks, 
+  taskId, 
+  isDarkMode, 
+  onShowWarning, 
+  onShowConfirmation, 
+  onRefresh 
+}) => {
   const [newSubtask, setNewSubtask] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [localSubtasks, setLocalSubtasks] = useState<TaskSubtask[]>(subtasks);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync local state with props
+  useEffect(() => {
+    setLocalSubtasks(subtasks);
+  }, [subtasks]);
+
+  // Focus edit input when editing starts
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
 
   const handleAddSubtask = async () => {
     if (!newSubtask.trim()) return;
 
     setIsAdding(true);
     try {
-      // TODO: Implement subtask creation
-      // await taskService.createSubtask(taskId, { title: newSubtask.trim() });
-      console.log('Adding subtask:', newSubtask.trim());
+      const subtask = await taskService.createSubtask(taskId, { title: newSubtask.trim() });
+      
+      // Update local state
+      setLocalSubtasks(prev => [...prev, subtask]);
       setNewSubtask('');
-      // Refresh subtasks would be needed here
-    } catch (error) {
+      
+      // Refresh parent component
+      onRefresh?.();
+      
+      onShowWarning?.('Subtask added successfully', 'success');
+    } catch (error: any) {
       console.error('Failed to add subtask:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to add subtask';
+      onShowWarning?.(errorMessage, 'error');
     } finally {
       setIsAdding(false);
     }
@@ -34,28 +66,102 @@ const TaskDetailSubtasks: React.FC<TaskDetailSubtasksProps> = ({ subtasks, taskI
 
   const handleToggleSubtask = async (subtaskId: string, completed: boolean) => {
     try {
-      // TODO: Implement subtask update
-      // await taskService.updateSubtask(taskId, subtaskId, { completed: !completed });
-      console.log('Toggling subtask:', subtaskId, !completed);
-      // Refresh subtasks would be needed here
-    } catch (error) {
+      const updatedSubtask = await taskService.updateSubtask(taskId, subtaskId, { completed: !completed });
+      
+      // Update local state
+      setLocalSubtasks(prev => 
+        prev.map(subtask => 
+          subtask.id === subtaskId 
+            ? { ...subtask, completed: !completed }
+            : subtask
+        )
+      );
+      
+      // Refresh parent component
+      onRefresh?.();
+    } catch (error: any) {
       console.error('Failed to update subtask:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to update subtask';
+      onShowWarning?.(errorMessage, 'error');
     }
   };
 
   const handleDeleteSubtask = async (subtaskId: string) => {
+    const subtask = localSubtasks.find(s => s.id === subtaskId);
+    if (!subtask) return;
+
+    onShowConfirmation?.(
+      'Delete Subtask',
+      `Are you sure you want to delete "${subtask.title}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await taskService.deleteSubtask(taskId, subtaskId);
+          
+          // Update local state
+          setLocalSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+          
+          // Refresh parent component
+          onRefresh?.();
+          
+          onShowWarning?.('Subtask deleted successfully', 'success');
+        } catch (error: any) {
+          console.error('Failed to delete subtask:', error);
+          const errorMessage = error.response?.data?.message || 'Failed to delete subtask';
+          onShowWarning?.(errorMessage, 'error');
+        }
+      },
+      'Delete',
+      'Cancel'
+    );
+  };
+
+  const handleStartEdit = (subtask: TaskSubtask) => {
+    setEditingId(subtask.id);
+    setEditingTitle(subtask.title);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editingTitle.trim()) return;
+
     try {
-      // TODO: Implement subtask deletion
-      // await taskService.deleteSubtask(taskId, subtaskId);
-      console.log('Deleting subtask:', subtaskId);
-      // Refresh subtasks would be needed here
-    } catch (error) {
-      console.error('Failed to delete subtask:', error);
+      const updatedSubtask = await taskService.updateSubtask(taskId, editingId, { title: editingTitle.trim() });
+      
+      // Update local state
+      setLocalSubtasks(prev => 
+        prev.map(subtask => 
+          subtask.id === editingId 
+            ? { ...subtask, title: editingTitle.trim() }
+            : subtask
+        )
+      );
+      
+      // Refresh parent component
+      onRefresh?.();
+      
+      setEditingId(null);
+      setEditingTitle('');
+    } catch (error: any) {
+      console.error('Failed to update subtask:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to update subtask';
+      onShowWarning?.(errorMessage, 'error');
     }
   };
 
-  const completedCount = subtasks.filter(subtask => subtask.completed).length;
-  const totalCount = subtasks.length;
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingTitle('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
+  const completedCount = localSubtasks.filter(subtask => subtask.completed).length;
+  const totalCount = localSubtasks.length;
   const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   return (
@@ -124,13 +230,13 @@ const TaskDetailSubtasks: React.FC<TaskDetailSubtasksProps> = ({ subtasks, taskI
 
       {/* Subtasks List */}
       <div className="space-y-2">
-        {subtasks.length === 0 ? (
+        {localSubtasks.length === 0 ? (
           <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
             <LucideCheckSquare className="w-8 h-8 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No subtasks yet. Add one above!</p>
           </div>
         ) : (
-          subtasks.map((subtask) => (
+          localSubtasks.map((subtask) => (
             <div
               key={subtask.id}
               className={`flex items-center gap-3 p-3 rounded-lg border transition-all hover:shadow-sm ${
@@ -149,22 +255,72 @@ const TaskDetailSubtasks: React.FC<TaskDetailSubtasksProps> = ({ subtasks, taskI
                   <LucideSquare className="w-4 h-4" />
                 )}
               </button>
-              <span
-                className={`flex-1 text-sm ${subtask.completed ? 'line-through' : ''} ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}
-              >
-                {subtask.title}
-              </span>
-              <button
-                onClick={() => handleDeleteSubtask(subtask.id)}
-                className={`flex-shrink-0 p-1.5 rounded-md transition-colors ${
-                  isDarkMode ? 'text-gray-500 hover:text-red-400 hover:bg-gray-700' : 'text-gray-400 hover:text-red-600 hover:bg-gray-100'
-                }`}
-                title="Delete subtask"
-              >
-                <LucideTrash2 className="w-4 h-4" />
-              </button>
+              
+              {/* Title Display or Edit Input */}
+              {editingId === subtask.id ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    className={`flex-1 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-white' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  />
+                  <button
+                    onClick={handleSaveEdit}
+                    className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                    title="Save"
+                  >
+                    <LucideCheck className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Cancel"
+                  >
+                    <LucideX className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <span
+                  className={`flex-1 text-sm cursor-pointer ${subtask.completed ? 'line-through' : ''} ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}
+                  onClick={() => handleStartEdit(subtask)}
+                  title="Click to edit"
+                >
+                  {subtask.title}
+                </span>
+              )}
+              
+              {/* Action Buttons */}
+              {editingId !== subtask.id && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleStartEdit(subtask)}
+                    className={`p-1.5 rounded-md transition-colors ${
+                      isDarkMode ? 'text-gray-500 hover:text-blue-400 hover:bg-gray-700' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100'
+                    }`}
+                    title="Edit subtask"
+                  >
+                    <LucideEdit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSubtask(subtask.id)}
+                    className={`p-1.5 rounded-md transition-colors ${
+                      isDarkMode ? 'text-gray-500 hover:text-red-400 hover:bg-gray-700' : 'text-gray-400 hover:text-red-600 hover:bg-gray-100'
+                    }`}
+                    title="Delete subtask"
+                  >
+                    <LucideTrash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

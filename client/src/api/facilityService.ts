@@ -9,6 +9,16 @@ export interface Facility {
   updatedAt: string;
 }
 
+export interface FacilityMember {
+  id: string;
+  name: string;
+  email: string;
+  profilePicture?: string;
+  role: string;
+  joinedAt: string;
+  isOwner: boolean;
+}
+
 export const facilityService = {
   // Get all facilities
   getAll: async (): Promise<Facility[]> => {
@@ -37,5 +47,11 @@ export const facilityService = {
   // Delete facility
   delete: async (id: string): Promise<void> => {
     await api.delete(`/facilities/${id}`);
+  },
+
+  // Get facility members
+  getFacilityMembers: async (facilityId: string): Promise<FacilityMember[]> => {
+    const response = await api.get(`/facilities/${facilityId}/members`);
+    return response.data.members;
   },
 };

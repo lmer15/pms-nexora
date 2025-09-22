@@ -7,13 +7,16 @@ import {
   LucidePlayCircle,
   LucideEdit3,
   LucideShare2,
-  LucideBookmark,
+  LucidePin,
   LucideMoreHorizontal,
-  LucideCalendar,
-  LucideUser,
   LucideCheck,
   LucideX as LucideCancel,
-  LucideChevronDown
+  LucideChevronDown,
+  LucideCopy,
+  LucideTrash2,
+  LucideArchive,
+  LucideMove,
+  LucideGitMerge
 } from 'lucide-react';
 import { Task } from '../../api/taskService';
 import { Button } from '../ui/button';
@@ -23,18 +26,17 @@ interface TaskDetailHeaderProps {
   task: Task;
   onClose: () => void;
   isDarkMode: boolean;
-  onEdit?: () => void;
-  isEditing?: boolean;
   editedTask?: Partial<Task>;
   onFieldChange?: (field: keyof Task, value: any) => void;
   onSaveTitle?: (title: string) => void;
   onStatusChange?: (status: Task['status']) => void;
 }
 
-const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDarkMode, onEdit, isEditing = false, editedTask = {}, onFieldChange, onSaveTitle, onStatusChange }) => {
+const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDarkMode, editedTask = {}, onFieldChange, onSaveTitle, onStatusChange }) => {
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
 
   const handleTitleClick = () => {
     setIsTitleEditing(true);
@@ -131,7 +133,7 @@ const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDa
   ];
 
   return (
-    <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+    <div className={`sticky top-0 z-40 px-6 py-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/95 backdrop-blur' : 'border-gray-200 bg-white/95 backdrop-blur'}`}>
       {/* Top Row - Status, Title, and Close */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -145,7 +147,7 @@ const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDa
               <LucideChevronDown className="w-3 h-3" />
             </button>
             {isStatusDropdownOpen && (
-              <div className={`absolute top-full left-0 mt-1 w-40 rounded-md shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <div className={`absolute top-full left-0 mt-1 w-44 rounded-md shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                 {statusOptions.map((option) => (
                   <button
                     key={option.value}
@@ -190,7 +192,7 @@ const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDa
             </div>
           ) : (
             <h1
-              className={`text-xl font-bold truncate max-w-[calc(100%-8rem)] ${isDarkMode ? 'text-white' : 'text-gray-900'} ${isEditing ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded' : ''}`}
+              className={`text-xl md:text-2xl font-bold truncate max-w-[calc(100%-8rem)] ${isDarkMode ? 'text-white' : 'text-gray-900'} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded`}
               onClick={handleTitleClick}
             >
               {editedTask.title ?? task.title}
@@ -204,101 +206,110 @@ const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDa
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
-            onClick={onEdit}
-            aria-label="Edit task"
-          >
-            <LucideEdit3 className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
             onClick={() => {
-              // Add share functionality
+              // Pin functionality
+              alert('Pin feature coming soon!');
             }}
-            aria-label="Share task"
+            aria-label="Pin task"
+            title="Pin task"
           >
-            <LucideShare2 className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => {
-              // Add bookmark functionality
-            }}
-            aria-label="Bookmark task"
-          >
-            <LucideBookmark className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => {
-              // Add more options
-            }}
-            aria-label="More options"
-          >
-            <LucideMoreHorizontal className="w-4 h-4" />
+            <LucidePin className="w-4 h-4" />
           </Button>
 
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
+              aria-label="More options"
+              title="More options"
+            >
+              <LucideMoreHorizontal className="w-4 h-4" />
+            </Button>
+            {isMoreDropdownOpen && (
+              <div className={`absolute top-full right-0 mt-1 w-48 rounded-md shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <button
+                  onClick={() => {
+                    // Share functionality
+                    const url = window.location.href;
+                    navigator.clipboard.writeText(url).then(() => {
+                      alert('Task link copied to clipboard!');
+                    });
+                    setIsMoreDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
+                >
+                  <LucideShare2 className="w-4 h-4" />
+                  Share task
+                </button>
+                <button
+                  onClick={() => {
+                    // Duplicate functionality
+                    alert('Duplicate feature coming soon!');
+                    setIsMoreDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
+                >
+                  <LucideCopy className="w-4 h-4" />
+                  Duplicate
+                </button>
+                <button
+                  onClick={() => {
+                    // Move functionality
+                    alert('Move feature coming soon!');
+                    setIsMoreDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
+                >
+                  <LucideMove className="w-4 h-4" />
+                  Move to project
+                </button>
+                <button
+                  onClick={() => {
+                    // Convert to subtask functionality
+                    alert('Convert to subtask feature coming soon!');
+                    setIsMoreDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
+                >
+                  <LucideGitMerge className="w-4 h-4" />
+                  Convert to subtask
+                </button>
+                <div className={`border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`} />
+                <button
+                  onClick={() => {
+                    // Archive/Delete functionality
+                    if (confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+                      alert('Delete feature would be implemented here!');
+                    }
+                    setIsMoreDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center gap-2`}
+                >
+                  <LucideTrash2 className="w-4 h-4" />
+                  Delete task
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
-          
+
           <Button
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
             onClick={onClose}
             aria-label="Close"
+            title="Close"
           >
             <LucideX className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Bottom Row - Task Meta Information */}
-      <div className="flex items-center gap-6 text-sm">
-        {/* Task ID */}
-        <div className="flex items-center gap-1.5">
-          <span className={`font-mono text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
-            #{task.id.slice(-8)}
-          </span>
-        </div>
 
-        {/* Assignee */}
-        <div className="flex items-center gap-1.5">
-          <LucideUser className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-          <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-            {task.assignee || 'Unassigned'}
-          </span>
-        </div>
-
-        {/* Due Date */}
-        {task.dueDate && (
-          <div className="flex items-center gap-1.5">
-            <LucideCalendar className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-            <span className={`${
-              isOverdue(task.dueDate) 
-                ? 'text-red-600 dark:text-red-400 font-medium' 
-                : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              {isOverdue(task.dueDate) && 'Overdue: '}
-              {new Date(task.dueDate).toLocaleDateString()}
-            </span>
-          </div>
-        )}
-
-        {/* Created Date */}
-        <div className="flex items-center gap-1.5">
-          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            Created {new Date(task.createdAt).toLocaleDateString()}
-          </span>
-        </div>
-      </div>
     </div>
   );
 };

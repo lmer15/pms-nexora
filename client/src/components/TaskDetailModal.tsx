@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { TaskDetails, taskService, Task, TaskComment, TaskAttachment, TaskDependency, TaskSubtask, TaskTimeLog, TaskActivityLog } from '../api/taskService';
+import { projectService } from '../api/projectService';
 import { useAuth } from '../hooks/useAuth';
-import { LucideX, LucideMessageSquare, LucidePaperclip, LucideGitBranch, LucideCheckSquare, LucideClock, LucideActivity, LucideFileText } from 'lucide-react';
+import { LucideX, LucideMessageSquare, LucidePaperclip, LucideGitBranch, LucideCheckSquare, LucideClock, LucideActivity, LucideFileText, LucideMoreHorizontal } from 'lucide-react';
 import LoadingAnimation from './LoadingAnimation';
 import { ErrorAlert } from './ui/error-alert';
 import { ConfirmationDialog } from './ui/confirmation-dialog';
@@ -30,9 +31,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const [error, setError] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState<Partial<Task>>({});
   const [titleSaving, setTitleSaving] = useState(false);
+  const [facilityId, setFacilityId] = useState<string>('');
+  const [projectOwnerId, setProjectOwnerId] = useState<string>('');
 
   // UI State
   const [confirmationDialog, setConfirmationDialog] = useState<{
@@ -60,9 +62,20 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   });
 
   const [commentCount, setCommentCount] = useState(0);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   useEffect(() => {
     setIsDarkMode(document.documentElement.classList.contains('dark'));
+  }, []);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 768); // md breakpoint
+    };
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   useEffect(() => {
@@ -84,6 +97,13 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     try {
       const details = await taskService.getTaskDetails(taskId);
       setTaskDetails(details);
+
+      // Fetch project to get facilityId and owner
+      if (details.task.projectId) {
+        const project = await projectService.getById(details.task.projectId);
+        setFacilityId(project.facilityId);
+        if (project.creatorId) setProjectOwnerId(project.creatorId);
+      }
     } catch (err) {
       setError('Failed to load task details');
       console.error(err);
@@ -92,8 +112,76 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     }
   };
 
-  // UI Helper Functions
-  const showConfirmation = (title: string, message: string, onConfirm: () => void, confirmText = 'Confirm', cancelText = 'Cancel') => {
+  // Field change handler for local state updates
+  const handleFieldChange = (field: keyof Task, value: any) => {
+    setEditedTask((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleFieldChangeAndSave = async (field: keyof Task, value: any) => {
+    if (!taskDetails) return;
+    try {
+      // Update local state immediately for UI responsiveness
+      setEditedTask((prev) => ({ ...prev, [field]: value }));
+      
+      // Save to database
+      const updatedTask = await taskService.update(taskDetails.task.id, { [field]: value });
+      
+      // Update the task details state with the response from the server
+      setTaskDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          task: {
+            ...prev.task,
+            [field]: value,
+            updatedAt: updatedTask.updatedAt
+          }
+        };
+      });
+      
+      setWarningToast({ isVisible: true, message: 'Task updated successfully', type: 'success' });
+    } catch (err) {
+      console.error('Failed to save field change:', err);
+      setWarningToast({ isVisible: true, message: 'Failed to save changes', type: 'error' });
+    }
+  };
+
+
+  const handleSaveTitle = async (title: string) => {
+    if (!taskDetails) return;
+    setTitleSaving(true);
+    try {
+      await taskService.update(taskDetails.task.id, { title });
+      await loadTaskDetails();
+      setWarningToast({ isVisible: true, message: 'Title updated', type: 'success' });
+    } catch (err) {
+      console.error('Failed to update title:', err);
+      setWarningToast({ isVisible: true, message: 'Failed to update title', type: 'error' });
+    } finally {
+      setTitleSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (status: Task['status']) => {
+    if (!taskDetails) return;
+    try {
+      await taskService.update(taskDetails.task.id, { status });
+      await loadTaskDetails();
+      setWarningToast({ isVisible: true, message: 'Status updated', type: 'success' });
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      setWarningToast({ isVisible: true, message: 'Failed to update status', type: 'error' });
+    }
+  };
+
+  // UI helpers
+  const showConfirmation = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmText?: string,
+    cancelText?: string
+  ) => {
     setConfirmationDialog({
       isOpen: true,
       title,
@@ -104,302 +192,292 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     });
   };
 
-  const hideConfirmation = () => {
-    setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
+  const showWarning = (message: string, type: 'error' | 'success' | 'warning' = 'error') => {
+    const mappedType: 'error' | 'success' = type === 'success' ? 'success' : 'error';
+    setWarningToast({ isVisible: true, message, type: mappedType });
   };
 
-  const showWarning = (message: string, type: 'warning' | 'error' | 'success' = 'error') => {
-    const notificationType = type === 'warning' ? 'error' : type;
-    setWarningToast({
-      isVisible: true,
-      message,
-      type: notificationType,
-    });
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-      setWarningToast(prev => ({ ...prev, isVisible: false }));
-    }, 3000);
-  };
-
-  const handleRefresh = () => {
-    loadTaskDetails();
-  };
-
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: LucideFileText, count: null },
-    { id: 'comments', label: 'Comments', icon: LucideMessageSquare, count: commentCount || (taskDetails?.comments?.length || 0) },
-    { id: 'attachments', label: 'Attachments', icon: LucidePaperclip, count: taskDetails?.attachments?.length || 0 },
-    { id: 'dependencies', label: 'Dependencies', icon: LucideGitBranch, count: taskDetails?.dependencies?.length || 0 },
-    { id: 'subtasks', label: 'Subtasks', icon: LucideCheckSquare, count: taskDetails?.subtasks?.length || 0 },
-    { id: 'timelogs', label: 'Time Logs', icon: LucideClock, count: taskDetails?.timeLogs?.length || 0 },
-    { id: 'activity', label: 'Activity', icon: LucideActivity, count: taskDetails?.activityLogs?.length || 0 },
-  ];
-
-  const renderTabContent = () => {
-    if (!taskDetails) return null;
-
-    switch (activeTab) {
-      case 'overview':
-        return (
-          <TaskDetailCoreDetails
-            task={taskDetails.task}
-            isDarkMode={isDarkMode}
-            isEditing={isEditing}
-            editedTask={editedTask}
-            onFieldChange={handleFieldChange}
-            onSave={saveChanges}
-            onCancel={cancelEditing}
-          />
-        );
-      case 'comments':
-        return (
-            <TaskDetailComments
-              taskId={taskId}
-              isDarkMode={isDarkMode}
-              onShowWarning={showWarning}
-              onCountChange={setCommentCount}
-            />
-        );
-      case 'attachments':
-        return (
-          <TaskDetailAttachments
-            taskId={taskId}
-            attachments={taskDetails.attachments}
-            isDarkMode={isDarkMode}
-            onRefresh={loadTaskDetails}
-            onShowWarning={showWarning}
-            onShowConfirmation={showConfirmation}
-          />
-        );
-      case 'dependencies':
-        return (
-          <TaskDetailDependencies
-            dependencies={taskDetails.dependencies}
-            isDarkMode={isDarkMode}
-            onShowWarning={showWarning}
-            onShowConfirmation={showConfirmation}
-          />
-        );
-      case 'subtasks':
-        return (
-          <TaskDetailSubtasks
-            subtasks={taskDetails.subtasks}
-            taskId={taskId}
-            isDarkMode={isDarkMode}
-            onShowWarning={showWarning}
-            onShowConfirmation={showConfirmation}
-          />
-        );
-      case 'timelogs':
-        return (
-          <TaskDetailTimeLogs
-            timeLogs={taskDetails.timeLogs}
-            isDarkMode={isDarkMode}
-            onShowWarning={showWarning}
-          />
-        );
-      case 'activity':
-        return <TaskDetailActivityLogs activityLogs={taskDetails.activityLogs} isDarkMode={isDarkMode} />;
-      default:
-        return <TaskDetailCoreDetails task={taskDetails.task} isDarkMode={isDarkMode} />;
-    }
+  const closeModal = () => {
+    setEditedTask({});
+    onClose();
   };
 
   if (!isOpen) return null;
 
-  // Handler for field changes in editing mode
-  function handleFieldChange(field: keyof Task, value: any) {
-    setEditedTask(prev => ({ ...prev, [field]: value }));
-  }
-
-  // Save changes to backend
-  async function saveChanges() {
-    if (!taskDetails) return;
-    try {
-      const updatedTask = { ...taskDetails.task, ...editedTask };
-      // Validate date fields to avoid "Invalid Date"
-      if (updatedTask.dueDate && isNaN(new Date(updatedTask.dueDate).getTime())) {
-        showWarning('Invalid due date format', 'error');
-        return;
-      }
-      if (updatedTask.startDate && isNaN(new Date(updatedTask.startDate).getTime())) {
-        showWarning('Invalid start date format', 'error');
-        return;
-      }
-      if (updatedTask.title && updatedTask.title.trim() === '') {
-        showWarning('Task title cannot be empty', 'error');
-        return;
-      }
-      setTitleSaving(true);
-      const savedTask = await taskService.update(updatedTask.id, editedTask);
-      setTaskDetails(prev => prev ? { ...prev, task: savedTask } : prev);
-      setIsEditing(false);
-      setEditedTask({});
-      showWarning('Task updated successfully', 'success');
-      // Update task card immediately after saving changes
-      if (typeof window !== 'undefined' && window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('taskUpdated', { detail: savedTask }));
-      }
-    } catch (error) {
-      console.error(error);
-      showWarning('Failed to update task', 'error');
-    } finally {
-      setTitleSaving(false);
-    }
-  }
-
-  // Save title change only
-  async function saveTitle(title: string) {
-    if (!taskDetails) return;
-    if (title.trim() === '') {
-      showWarning('Task title cannot be empty', 'error');
-      return;
-    }
-    try {
-      setTitleSaving(true);
-      const savedTask = await taskService.update(taskDetails.task.id, { title });
-      setTaskDetails(prev => prev ? { ...prev, task: savedTask } : prev);
-      setIsEditing(false);
-      setEditedTask(prev => ({ ...prev, title: savedTask.title }));
-      showWarning('Task title updated successfully', 'success');
-      // Update task card immediately after saving title
-      if (typeof window !== 'undefined' && window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('taskUpdated', { detail: savedTask }));
-      }
-    } catch (error) {
-      console.error(error);
-      showWarning('Failed to update task title', 'error');
-    } finally {
-      setTitleSaving(false);
-    }
-  }
-
-  // Cancel editing and revert changes
-  function cancelEditing() {
-    setIsEditing(false);
-    setEditedTask({});
-  }
-
-  // Handle status change
-  async function handleStatusChange(status: Task['status']) {
-    if (!taskDetails) return;
-    try {
-      const savedTask = await taskService.update(taskDetails.task.id, { status });
-      setTaskDetails(prev => prev ? { ...prev, task: savedTask } : prev);
-      showWarning('Task status updated successfully', 'success');
-      // Update task card immediately after saving status
-      if (typeof window !== 'undefined' && window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('taskUpdated', { detail: savedTask }));
-      }
-    } catch (error) {
-      console.error(error);
-      showWarning('Failed to update task status', 'error');
-    }
-  }
-
   return (
-    <>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden animate-in fade-in-0 zoom-in-95 duration-300">
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <LoadingAnimation />
-            </div>
-          ) : error ? (
-            <div className="flex-1 flex items-center justify-center p-6">
-              <div className="text-center">
-                <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={closeModal} />
+      <div
+        className={`relative z-10 w-full max-w-6xl h-[90vh] max-h-[800px] rounded-lg overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        {loading ? (
+          <div className="flex items-center justify-center p-10">
+            <LoadingAnimation />
+          </div>
+        ) : error ? (
+          <div className="p-4">
+            <ErrorAlert title="Error" message={error} />
+          </div>
+        ) : taskDetails ? (
+          <>
+            <TaskDetailHeader
+              task={taskDetails.task}
+              onClose={closeModal}
+              isDarkMode={isDarkMode}
+              editedTask={editedTask}
+              onFieldChange={handleFieldChange}
+              onSaveTitle={handleSaveTitle}
+              onStatusChange={handleStatusChange}
+            />
+
+            {/* Tabs */}
+            <div className={`sticky top-[64px] z-30 px-4 sm:px-6 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/95 backdrop-blur' : 'border-gray-200 bg-white/95 backdrop-blur'}`}>
+              <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 <button
-                  onClick={onClose}
-                  className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'overview'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('overview')}
                 >
-                  Close
+                  <LucideFileText className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Overview</span>
+                  <span className="sm:hidden">Overview</span>
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'comments'
+                      ? 'bg-green-600 text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('comments')}
+                >
+                  <LucideMessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span>Comments</span>
+                  {commentCount > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      activeTab === 'comments'
+                        ? 'bg-green-500 text-white'
+                        : isDarkMode 
+                        ? 'bg-gray-700 text-gray-300' 
+                        : 'bg-gray-200 text-gray-700'
+                    }`}>{commentCount}</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'attachments'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('attachments')}
+                >
+                  <LucidePaperclip className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Attachments</span>
+                  <span className="sm:hidden">Files</span>
+                  {taskDetails.attachments?.length > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>{taskDetails.attachments.length}</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'dependencies'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('dependencies')}
+                >
+                  <LucideGitBranch className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Dependencies</span>
+                  <span className="sm:hidden">Deps</span>
+                  {taskDetails.dependencies?.length > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>{taskDetails.dependencies.length}</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'subtasks'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('subtasks')}
+                >
+                  <LucideCheckSquare className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Subtasks</span>
+                  <span className="sm:hidden">Tasks</span>
+                  {taskDetails.subtasks?.length > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>{taskDetails.subtasks.length}</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'timelogs'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('timelogs')}
+                >
+                  <LucideClock className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Time Logs</span>
+                  <span className="sm:hidden">Time</span>
+                  {taskDetails.timeLogs?.length > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>{taskDetails.timeLogs.length}</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                    activeTab === 'activity'
+                      ? 'bg-brand text-white'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setActiveTab('activity')}
+                >
+                  <LucideActivity className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                  <span className="hidden sm:inline">Activity</span>
+                  <span className="sm:hidden">Log</span>
+                  {taskDetails.activityLogs?.length > 0 && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>{taskDetails.activityLogs.length}</span>
+                  )}
                 </button>
               </div>
             </div>
-          ) : taskDetails ? (
-            <>
-              {/* Sticky Header */}
-              <div className="flex-shrink-0">
-              <TaskDetailHeader
-                task={taskDetails.task}
-                onClose={onClose}
-                isDarkMode={isDarkMode}
-                onEdit={() => setIsEditing(!isEditing)}
-                isEditing={isEditing}
-                editedTask={editedTask}
-                onFieldChange={handleFieldChange}
-                onSaveTitle={saveTitle}
-                onStatusChange={handleStatusChange}
-              />
-              </div>
 
-              {/* Tab Navigation */}
-              <div className={`flex-shrink-0 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <div className="flex overflow-x-auto scrollbar-hide px-2">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as TabType)}
-                        className={`
-                          flex items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-all duration-200 rounded-t-lg mx-0.5
-                          ${activeTab === tab.id
-                            ? `border-brand text-brand ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`
-                            : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`
-                          }
-                        `}
-                      >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="hidden sm:inline">{tab.label}</span>
-                        {tab.count !== null && tab.count > 0 && (
-                          <span className={`
-                            px-1.5 py-0.5 text-xs rounded-full font-medium min-w-[1.25rem] text-center
-                            ${activeTab === tab.id
-                              ? 'bg-brand text-white'
-                              : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                            }
-                          `}>
-                            {tab.count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto">
+              {activeTab === 'overview' && (
+            <TaskDetailCoreDetails
+              task={taskDetails.task}
+              isDarkMode={isDarkMode}
+              editedTask={editedTask}
+              onFieldChange={handleFieldChange}
+              onFieldChangeAndSave={handleFieldChangeAndSave}
+              comments={taskDetails.comments}
+              activityLogs={taskDetails.activityLogs}
+              onSwitchToComments={() => setActiveTab('comments')}
+              subtasks={taskDetails.subtasks}
+              facilityId={facilityId}
+              excludeUserId={projectOwnerId}
+              dependencies={taskDetails.dependencies}
+              onSwitchToDependencies={() => setActiveTab('dependencies')}
+              onSwitchToSubtasks={() => setActiveTab('subtasks')}
+            />
+              )}
+              {activeTab === 'comments' && (
+                <TaskDetailComments
+                  taskId={taskDetails.task.id}
+                  isDarkMode={isDarkMode}
+                  onShowWarning={showWarning}
+                  onCountChange={(count) => setCommentCount(count)}
+                />
+              )}
+              {activeTab === 'attachments' && (
+                <TaskDetailAttachments
+                  taskId={taskDetails.task.id}
+                  attachments={taskDetails.attachments}
+                  isDarkMode={isDarkMode}
+                  onRefresh={loadTaskDetails}
+                  onShowWarning={showWarning}
+                  onShowConfirmation={(title, message, onConfirm, confirmText, cancelText) =>
+                    showConfirmation(title, message, onConfirm, confirmText, cancelText)
+                  }
+                />
+              )}
+              {activeTab === 'dependencies' && (
+                <TaskDetailDependencies
+                  taskId={taskDetails.task.id}
+                  dependencies={taskDetails.dependencies}
+                  isDarkMode={isDarkMode}
+                  onShowWarning={showWarning}
+                  onShowConfirmation={(title, message, onConfirm, confirmText, cancelText) =>
+                    showConfirmation(title, message, onConfirm, confirmText, cancelText)
+                  }
+                  onRefresh={loadTaskDetails}
+                />
+              )}
+              {activeTab === 'subtasks' && (
+                <TaskDetailSubtasks
+                  subtasks={taskDetails.subtasks}
+                  taskId={taskDetails.task.id}
+                  isDarkMode={isDarkMode}
+                  onShowWarning={showWarning}
+                  onShowConfirmation={(title, message, onConfirm, confirmText, cancelText) =>
+                    showConfirmation(title, message, onConfirm, confirmText, cancelText)
+                  }
+                  onRefresh={loadTaskDetails}
+                />
+              )}
+              {activeTab === 'timelogs' && (
+                <TaskDetailTimeLogs
+                  timeLogs={taskDetails.timeLogs}
+                  isDarkMode={isDarkMode}
+                  taskId={taskDetails.task.id}
+                  onShowWarning={showWarning}
+                  onTimeLogsUpdate={loadTaskDetails}
+                  onShowConfirmation={showConfirmation}
+                />
+              )}
+              {activeTab === 'activity' && (
+                <TaskDetailActivityLogs
+                  activityLogs={taskDetails.activityLogs}
+                  isDarkMode={isDarkMode}
+                  onShowWarning={showWarning}
+                />
+              )}
+            </div>
+          </>
+        ) : null}
 
-              {/* Tab Content */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
-                  {renderTabContent()}
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      {/* UI Components */}
-      <ConfirmationDialog
-        isOpen={confirmationDialog.isOpen}
-        title={confirmationDialog.title}
-        message={confirmationDialog.message}
-        onConfirm={confirmationDialog.onConfirm}
-        onCancel={hideConfirmation}
-        confirmText={confirmationDialog.confirmText}
-        cancelText={confirmationDialog.cancelText}
-      />
-
-      {warningToast.isVisible && (
-        <Notification
-          message={warningToast.message}
-          type={warningToast.type}
-          onClose={() => setWarningToast(prev => ({ ...prev, isVisible: false }))}
+        {/* Confirmation Dialog */}
+        <ConfirmationDialog
+          isOpen={confirmationDialog.isOpen}
+          title={confirmationDialog.title}
+          message={confirmationDialog.message}
+          confirmText={confirmationDialog.confirmText}
+          cancelText={confirmationDialog.cancelText}
+          onConfirm={() => {
+            confirmationDialog.onConfirm?.();
+            setConfirmationDialog((prev) => ({ ...prev, isOpen: false }));
+          }}
+          onCancel={() => setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))}
         />
-      )}
-    </>
+
+        {/* Notification */}
+        {warningToast.isVisible && (
+          <Notification
+            message={warningToast.message}
+            onClose={() => setWarningToast((prev) => ({ ...prev, isVisible: false }))}
+            type={warningToast.type === 'success' ? 'success' : 'error'}
+          />
+        )}
+      </div>
+    </div>
   );
 };
 
