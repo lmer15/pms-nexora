@@ -5,18 +5,11 @@ import {
   LucideClock,
   LucideAlertCircle,
   LucidePlayCircle,
-  LucideEdit3,
-  LucideShare2,
   LucidePin,
-  LucideMoreHorizontal,
   LucideCheck,
   LucideX as LucideCancel,
   LucideChevronDown,
-  LucideCopy,
-  LucideTrash2,
-  LucideArchive,
-  LucideMove,
-  LucideGitMerge
+  LucideTrash2
 } from 'lucide-react';
 import { Task } from '../../api/taskService';
 import { Button } from '../ui/button';
@@ -30,13 +23,14 @@ interface TaskDetailHeaderProps {
   onFieldChange?: (field: keyof Task, value: any) => void;
   onSaveTitle?: (title: string) => void;
   onStatusChange?: (status: Task['status']) => void;
+  onPinChange?: (pinned: boolean) => void;
+  onDeleteClick?: () => void;
 }
 
-const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDarkMode, editedTask = {}, onFieldChange, onSaveTitle, onStatusChange }) => {
+const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDarkMode, editedTask = {}, onFieldChange, onSaveTitle, onStatusChange, onPinChange, onDeleteClick }) => {
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
-  const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
 
   const handleTitleClick = () => {
     setIsTitleEditing(true);
@@ -205,94 +199,33 @@ const TaskDetailHeader: React.FC<TaskDetailHeaderProps> = ({ task, onClose, isDa
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0"
+            className={`h-8 w-8 p-0 ${(editedTask.pinned ?? task.pinned) ? 'text-green-600 dark:text-green-400' : ''}`}
             onClick={() => {
-              // Pin functionality
-              alert('Pin feature coming soon!');
+              const newPinnedState = !(editedTask.pinned ?? task.pinned);
+              if (onPinChange) {
+                onPinChange(newPinnedState);
+              }
             }}
-            aria-label="Pin task"
-            title="Pin task"
+            aria-label={editedTask.pinned ?? task.pinned ? "Unpin task" : "Pin task"}
+            title={editedTask.pinned ?? task.pinned ? "Unpin task" : "Pin task"}
           >
-            <LucidePin className="w-4 h-4" />
+            <LucidePin className={`w-4 h-4 ${(editedTask.pinned ?? task.pinned) ? 'fill-current' : ''}`} />
           </Button>
 
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
-              aria-label="More options"
-              title="More options"
-            >
-              <LucideMoreHorizontal className="w-4 h-4" />
-            </Button>
-            {isMoreDropdownOpen && (
-              <div className={`absolute top-full right-0 mt-1 w-48 rounded-md shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <button
-                  onClick={() => {
-                    // Share functionality
-                    const url = window.location.href;
-                    navigator.clipboard.writeText(url).then(() => {
-                      alert('Task link copied to clipboard!');
-                    });
-                    setIsMoreDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
-                >
-                  <LucideShare2 className="w-4 h-4" />
-                  Share task
-                </button>
-                <button
-                  onClick={() => {
-                    // Duplicate functionality
-                    alert('Duplicate feature coming soon!');
-                    setIsMoreDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
-                >
-                  <LucideCopy className="w-4 h-4" />
-                  Duplicate
-                </button>
-                <button
-                  onClick={() => {
-                    // Move functionality
-                    alert('Move feature coming soon!');
-                    setIsMoreDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
-                >
-                  <LucideMove className="w-4 h-4" />
-                  Move to project
-                </button>
-                <button
-                  onClick={() => {
-                    // Convert to subtask functionality
-                    alert('Convert to subtask feature coming soon!');
-                    setIsMoreDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2`}
-                >
-                  <LucideGitMerge className="w-4 h-4" />
-                  Convert to subtask
-                </button>
-                <div className={`border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`} />
-                <button
-                  onClick={() => {
-                    // Archive/Delete functionality
-                    if (confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
-                      alert('Delete feature would be implemented here!');
-                    }
-                    setIsMoreDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center gap-2`}
-                >
-                  <LucideTrash2 className="w-4 h-4" />
-                  Delete task
-                </button>
-              </div>
-            )}
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => {
+              if (onDeleteClick) {
+                onDeleteClick();
+              }
+            }}
+            aria-label="Delete task"
+            title="Delete task"
+          >
+            <LucideTrash2 className="w-4 h-4" />
+          </Button>
 
           <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
 

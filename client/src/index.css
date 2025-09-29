@@ -6,6 +6,11 @@ html { scroll-behavior: smooth;}
 * { -webkit-tap-highlight-color: transparent; }
 body { transition: background-color .25s, color .25s; font-family: Poppins ; scrollbar-width: auto; scrollbar-color: rgba(100, 116, 139, 1) transparent; overflow-y: hidden; overflow-x: auto; }
 
+/* Prevent focus outlines on background elements when modal is open */
+body.modal-open *:not([role="dialog"]):not([role="dialog"] *) {
+  outline: none !important;
+}
+
 ::-webkit-scrollbar {
   width: 3px;
 }

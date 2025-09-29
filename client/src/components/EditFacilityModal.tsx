@@ -1,22 +1,31 @@
-import React, { useState } from 'react';
-import { LucideX, LucideBuilding } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LucideX, LucideBuilding, LucideEdit } from 'lucide-react';
+import { Facility } from '../api/facilityService';
 
-interface CreateFacilityModalProps {
+interface EditFacilityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (facilityData: { name: string }) => Promise<void>;
+  onUpdate: (facilityId: string, facilityData: { name: string }) => Promise<void>;
+  facility: Facility | null;
   isDarkMode: boolean;
 }
 
-const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
+const EditFacilityModal: React.FC<EditFacilityModalProps> = ({
   isOpen,
   onClose,
-  onCreate,
+  onUpdate,
+  facility,
   isDarkMode,
 }) => {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (facility && isOpen) {
+      setName(facility.name);
+    }
+  }, [facility, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,14 +35,18 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
       return;
     }
 
+    if (!facility) {
+      setError('No facility selected');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
-      await onCreate({ name: name.trim() });
-      setName('');
+      await onUpdate(facility.id, { name: name.trim() });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create facility');
+      setError(err instanceof Error ? err.message : 'Failed to update facility');
     } finally {
       setLoading(false);
     }
@@ -47,7 +60,7 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !facility) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -55,12 +68,12 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-lg bg-brand/10">
-              <LucideBuilding className="w-5 h-5 text-brand" />
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20">
+              <LucideEdit className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create New Facility</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Set up a new workspace for your team</p>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Edit Facility</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Update facility information</p>
             </div>
           </div>
           <button
@@ -97,7 +110,7 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
               />
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Choose a descriptive name for your facility
+              Update the name of your facility
             </p>
           </div>
 
@@ -119,12 +132,12 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Creating...</span>
+                  <span>Updating...</span>
                 </>
               ) : (
                 <>
-                  <LucideBuilding className="w-4 h-4" />
-                  <span>Create Facility</span>
+                  <LucideEdit className="w-4 h-4" />
+                  <span>Update Facility</span>
                 </>
               )}
             </button>
@@ -135,4 +148,4 @@ const CreateFacilityModal: React.FC<CreateFacilityModalProps> = ({
   );
 };
 
-export default CreateFacilityModal;
+export default EditFacilityModal;

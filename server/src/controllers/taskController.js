@@ -251,6 +251,54 @@ exports.updateTask = async (req, res) => {
   }
 };
 
+exports.pinTask = async (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const { pinned } = req.body;
+    
+    // Check if task exists and user has access
+    try {
+      await checkTaskAccess(taskId, req.userId);
+    } catch (error) {
+      return res.status(403).json({ message: error.message });
+    }
+
+    const updatedTask = await Task.update(taskId, { pinned: Boolean(pinned) });
+    if (!updatedTask) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Log activity
+    await ActivityLoggerService.logTaskUpdated(taskId, req.userId, { pinned: Boolean(pinned) });
+
+    // Convert Firestore Timestamp fields to ISO strings for client
+    if (updatedTask.createdAt && typeof updatedTask.createdAt.toDate === 'function') {
+      updatedTask.createdAt = updatedTask.createdAt.toDate().toISOString();
+    } else if (updatedTask.createdAt instanceof Date) {
+      updatedTask.createdAt = updatedTask.createdAt.toISOString();
+    }
+
+    if (updatedTask.updatedAt && typeof updatedTask.updatedAt.toDate === 'function') {
+      updatedTask.updatedAt = updatedTask.updatedAt.toDate().toISOString();
+    } else if (updatedTask.updatedAt instanceof Date) {
+      updatedTask.updatedAt = updatedTask.updatedAt.toISOString();
+    }
+
+    // Map server fields to client fields for backward compatibility
+    if (updatedTask.assigneeId && !updatedTask.assignee) {
+      updatedTask.assignee = updatedTask.assigneeId;
+    }
+    if (updatedTask.assigneeIds && !updatedTask.assignees) {
+      updatedTask.assignees = updatedTask.assigneeIds;
+    }
+
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Error pinning task:', error);
+    res.status(500).json({ message: 'Server error pinning task' });
+  }
+};
+
 exports.deleteTask = async (req, res) => {
   try {
     const taskId = req.params.id;

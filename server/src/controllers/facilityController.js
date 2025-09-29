@@ -18,7 +18,47 @@ const { sendFacilityInvitationEmail, sendFacilityInvitationToExistingUser } = re
 exports.getFacilities = async (req, res) => {
   try {
     const facilities = await Facility.findByMember(req.userId);
-    res.json(facilities);
+    
+    // Get statistics for each facility
+    const facilitiesWithStats = await Promise.all(
+      facilities.map(async (facility) => {
+        try {
+          // Get member count
+          const relationships = await UserFacility.findByFacility(facility.id);
+          const memberCount = relationships.length;
+
+          // Get project count
+          const projects = await Project.findByFacility(facility.id);
+          const projectCount = projects.length;
+
+          // Get task count across all projects
+          let totalTaskCount = 0;
+          for (const project of projects) {
+            const tasks = await Task.findByProject(project.id);
+            totalTaskCount += tasks.length;
+          }
+
+          return {
+            ...facility,
+            status: facility.status || 'active', // Default to active if no status
+            memberCount,
+            projectCount,
+            taskCount: totalTaskCount
+          };
+        } catch (statsError) {
+          console.error(`Error fetching stats for facility ${facility.id}:`, statsError);
+          return {
+            ...facility,
+            status: facility.status || 'active',
+            memberCount: 0,
+            projectCount: 0,
+            taskCount: 0
+          };
+        }
+      })
+    );
+
+    res.json(facilitiesWithStats);
   } catch (error) {
     console.error('Error fetching facilities:', error);
     res.status(500).json({ message: 'Server error fetching facilities' });
@@ -96,14 +136,17 @@ exports.updateFacility = async (req, res) => {
 exports.deleteFacility = async (req, res) => {
   try {
     const facilityId = req.params.id;
+    console.log(`Delete facility request for ID: ${facilityId}, User: ${req.userId}`);
     
     // Check if facility exists and user is the owner
     const facility = await Facility.findById(facilityId);
     if (!facility) {
+      console.log(`Facility not found: ${facilityId}`);
       return res.status(404).json({ message: 'Facility not found' });
     }
     
     if (facility.ownerId !== req.userId) {
+      console.log(`User ${req.userId} is not owner of facility ${facilityId}. Owner is ${facility.ownerId}`);
       return res.status(403).json({ message: 'Only the facility owner can delete the facility' });
     }
 
@@ -115,67 +158,103 @@ exports.deleteFacility = async (req, res) => {
 
     // Delete all tasks and their related data for each project
     const taskDeletePromises = projects.map(async (project) => {
-      const tasks = await Task.findByProject(project.id);
-      console.log(`Found ${tasks.length} tasks in project ${project.id}`);
-      
-      return Promise.all(tasks.map(async (task) => {
-        // Delete all task-related data
-        const taskDeletePromises = [
-          // Delete task comments
-          TaskComment.findByTask(task.id).then(comments => {
-            if (comments && comments.length > 0) {
-              return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
-            }
-            return [];
-          }),
+      try {
+        const tasks = await Task.findByProject(project.id);
+        console.log(`Found ${tasks.length} tasks in project ${project.id}`);
+        
+        return Promise.all(tasks.map(async (task) => {
+          try {
+            console.log(`Deleting task ${task.id} and its related data`);
+            // Delete all task-related data
+            const taskDeletePromises = [
+              // Delete task comments
+              TaskComment.findByTask(task.id).then(comments => {
+                if (comments && comments.length > 0) {
+                  console.log(`Deleting ${comments.length} comments for task ${task.id}`);
+                  return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting comments for task ${task.id}:`, error);
+                throw error;
+              }),
           
-          // Delete task attachments
-          TaskAttachment.findByTask(task.id).then(attachments => {
-            if (attachments && attachments.length > 0) {
-              return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
-            }
-            return [];
-          }),
+              // Delete task attachments
+              TaskAttachment.findByTask(task.id).then(attachments => {
+                if (attachments && attachments.length > 0) {
+                  console.log(`Deleting ${attachments.length} attachments for task ${task.id}`);
+                  return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting attachments for task ${task.id}:`, error);
+                throw error;
+              }),
           
-          // Delete task dependencies
-          TaskDependency.findByTask(task.id).then(dependencies => {
-            if (dependencies && dependencies.length > 0) {
-              return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
-            }
-            return [];
-          }),
-          
-          // Delete task subtasks
-          TaskSubtask.findByTask(task.id).then(subtasks => {
-            if (subtasks && subtasks.length > 0) {
-              return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
-            }
-            return [];
-          }),
-          
-          // Delete task time logs
-          TaskTimeLog.findByTask(task.id).then(timeLogs => {
-            if (timeLogs && timeLogs.length > 0) {
-              return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
-            }
-            return [];
-          }),
-          
-          // Delete task activity logs
-          TaskActivityLog.findByTask(task.id).then(activityLogs => {
-            if (activityLogs && activityLogs.length > 0) {
-              return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
-            }
-            return [];
-          })
+              // Delete task dependencies
+              TaskDependency.findByTask(task.id).then(dependencies => {
+                if (dependencies && dependencies.length > 0) {
+                  console.log(`Deleting ${dependencies.length} dependencies for task ${task.id}`);
+                  return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting dependencies for task ${task.id}:`, error);
+                throw error;
+              }),
+              
+              // Delete task subtasks
+              TaskSubtask.findByTask(task.id).then(subtasks => {
+                if (subtasks && subtasks.length > 0) {
+                  console.log(`Deleting ${subtasks.length} subtasks for task ${task.id}`);
+                  return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting subtasks for task ${task.id}:`, error);
+                throw error;
+              }),
+              
+              // Delete task time logs
+              TaskTimeLog.findByTask(task.id).then(timeLogs => {
+                if (timeLogs && timeLogs.length > 0) {
+                  console.log(`Deleting ${timeLogs.length} time logs for task ${task.id}`);
+                  return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting time logs for task ${task.id}:`, error);
+                throw error;
+              }),
+              
+              // Delete task activity logs
+              TaskActivityLog.findByTask(task.id).then(activityLogs => {
+                if (activityLogs && activityLogs.length > 0) {
+                  console.log(`Deleting ${activityLogs.length} activity logs for task ${task.id}`);
+                  return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
+                }
+                return [];
+              }).catch(error => {
+                console.error(`Error deleting activity logs for task ${task.id}:`, error);
+                throw error;
+              })
         ];
 
-        // Wait for all task-related data to be deleted
-        await Promise.all(taskDeletePromises);
-        
-        // Delete the task itself
-        return Task.delete(task.id);
-      }));
+            // Wait for all task-related data to be deleted
+            await Promise.all(taskDeletePromises);
+            
+            // Delete the task itself
+            console.log(`Deleting task ${task.id}`);
+            return Task.delete(task.id);
+          } catch (taskError) {
+            console.error(`Error deleting task ${task.id}:`, taskError);
+            throw taskError;
+          }
+        }));
+      } catch (projectError) {
+        console.error(`Error processing project ${project.id}:`, projectError);
+        throw projectError;
+      }
     });
 
     // Wait for all tasks to be deleted
@@ -183,7 +262,15 @@ exports.deleteFacility = async (req, res) => {
     console.log(`All tasks deleted for facility ${facilityId}`);
 
     // Delete all projects in the facility
-    const projectDeletePromises = projects.map(project => Project.delete(project.id));
+    const projectDeletePromises = projects.map(async (project) => {
+      try {
+        console.log(`Deleting project ${project.id}`);
+        return await Project.delete(project.id);
+      } catch (error) {
+        console.error(`Error deleting project ${project.id}:`, error);
+        throw error;
+      }
+    });
     await Promise.all(projectDeletePromises);
     console.log(`All projects deleted for facility ${facilityId}`);
 
@@ -196,6 +283,9 @@ exports.deleteFacility = async (req, res) => {
           return Promise.all(relationships.map(relationship => UserFacility.delete(relationship.id)));
         }
         return [];
+      }).catch(error => {
+        console.error(`Error deleting user-facility relationships for facility ${facilityId}:`, error);
+        throw error;
       }),
       
       // Delete facility invitations
@@ -205,6 +295,9 @@ exports.deleteFacility = async (req, res) => {
           return Promise.all(invitations.map(invitation => FacilityInvitation.delete(invitation.id)));
         }
         return [];
+      }).catch(error => {
+        console.error(`Error deleting facility invitations for facility ${facilityId}:`, error);
+        throw error;
       }),
       
       // Delete facility share links
@@ -214,6 +307,9 @@ exports.deleteFacility = async (req, res) => {
           return Promise.all(shareLinks.map(shareLink => FacilityShareLink.delete(shareLink.id)));
         }
         return [];
+      }).catch(error => {
+        console.error(`Error deleting facility share links for facility ${facilityId}:`, error);
+        throw error;
       }),
       
       // Delete facility join requests
@@ -223,6 +319,9 @@ exports.deleteFacility = async (req, res) => {
           return Promise.all(joinRequests.map(joinRequest => FacilityJoinRequest.delete(joinRequest.id)));
         }
         return [];
+      }).catch(error => {
+        console.error(`Error deleting facility join requests for facility ${facilityId}:`, error);
+        throw error;
       }),
       
       // Delete facility notes
@@ -232,6 +331,9 @@ exports.deleteFacility = async (req, res) => {
           return Promise.all(notes.map(note => Note.delete(note.id)));
         }
         return [];
+      }).catch(error => {
+        console.error(`Error deleting facility notes for facility ${facilityId}:`, error);
+        throw error;
       })
     ];
 
@@ -240,16 +342,26 @@ exports.deleteFacility = async (req, res) => {
     console.log(`All facility-related data deleted for facility ${facilityId}`);
 
     // Finally delete the facility itself
-    const deleted = await Facility.delete(facilityId);
-    if (!deleted) {
-      return res.status(404).json({ message: 'Facility not found' });
-    }
+    try {
+      console.log(`Deleting facility ${facilityId}`);
+      const deleted = await Facility.delete(facilityId);
+      if (!deleted) {
+        console.log(`Facility ${facilityId} not found during deletion`);
+        return res.status(404).json({ message: 'Facility not found' });
+      }
 
-    console.log(`Facility ${facilityId} deleted successfully`);
-    res.json({ message: 'Facility and all related data deleted successfully' });
+      console.log(`Facility ${facilityId} deleted successfully`);
+      res.json({ message: 'Facility and all related data deleted successfully' });
+    } catch (facilityDeleteError) {
+      console.error(`Error deleting facility ${facilityId}:`, facilityDeleteError);
+      throw facilityDeleteError;
+    }
   } catch (error) {
     console.error('Error deleting facility:', error);
-    res.status(500).json({ message: 'Server error deleting facility' });
+    res.status(500).json({ 
+      message: 'Server error deleting facility',
+      error: error.message 
+    });
   }
 };
 
@@ -483,6 +595,37 @@ exports.getFacilityMembers = async (req, res) => {
   } catch (error) {
     console.error('Error fetching facility members:', error);
     res.status(500).json({ message: 'Server error fetching facility members' });
+  }
+};
+
+// Get facility statistics (member count, project count, etc.)
+exports.getFacilityStats = async (req, res) => {
+  try {
+    const { facilityId } = req.params;
+
+    // Get member count
+    const relationships = await UserFacility.findByFacility(facilityId);
+    const memberCount = relationships.length;
+
+    // Get project count
+    const projects = await Project.findByFacility(facilityId);
+    const projectCount = projects.length;
+
+    // Get task count across all projects
+    let totalTaskCount = 0;
+    for (const project of projects) {
+      const tasks = await Task.findByProject(project.id);
+      totalTaskCount += tasks.length;
+    }
+
+    res.json({
+      memberCount,
+      projectCount,
+      taskCount: totalTaskCount
+    });
+  } catch (error) {
+    console.error('Error fetching facility stats:', error);
+    res.status(500).json({ message: 'Server error fetching facility statistics' });
   }
 };
 

@@ -5,10 +5,7 @@ import {
   LucideArchive,
   LucideTrash2,
 } from 'lucide-react';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 import { Column, Task } from '../types';
 import TaskCard from './TaskCard';
 
@@ -39,6 +36,7 @@ interface ProjectColumnProps {
   handleDeleteProject: (projectId: string, projectName: string) => void;
   handleUpdateProjectName: (projectId: string, name: string) => void;
   handleOpenTaskDetail: (taskId: string) => void;
+  onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
 }
 
 const ProjectColumn: React.FC<ProjectColumnProps> = ({
@@ -68,12 +66,24 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
   handleDeleteProject,
   handleUpdateProjectName,
   handleOpenTaskDetail,
+  onTaskMove,
 }) => {
+  // Drop zone functionality
+  const { isOver, setNodeRef } = useDroppable({
+    id: `column-${column.id}`,
+    data: {
+      type: 'column',
+      columnId: column.id,
+    },
+  });
   return (
     <div
-      className={`group flex-shrink-0 flex flex-col min-h-0 max-h-full rounded-lg ${
+      ref={setNodeRef}
+      className={`group flex-shrink-0 flex flex-col min-h-0 max-h-full rounded-lg project-column drag-transition ${
         isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-      } p-3`}
+      } p-3 ${
+        isOver ? 'drop-zone-active' : ''
+      }`}
       style={{ width: '16.25rem', minWidth: '16.25rem', maxWidth: '16.25rem' }}
       onMouseLeave={() => setOpenDropdownId(null)}
     >
@@ -169,52 +179,63 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
 
       {/* Tasks - Scrollable */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
-        <SortableContext items={column.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {addingTaskColumnId === column.id ? (
-              <input
-                type="text"
-                value={editingTaskTitle}
-                onChange={(e) => setEditingTaskTitle(e.target.value)}
-                placeholder="Task title..."
-                className={`w-full font-semibold text-sm mb-2 px-3 py-2 rounded-lg focus:outline-none ${
-                  isDarkMode
-                    ? 'bg-gray-600 text-white border-gray-500 placeholder-gray-400'
-                    : 'bg-white text-gray-900 border-gray-300 placeholder-gray-500'
-                }`}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSaveNewTask(column.id);
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    handleCancelNewTask();
-                  }
-                }}
-                onBlur={() => handleSaveNewTask(column.id)}
-              />
-            ) : null}
-            {column.tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              columnId={column.id}
-              isDarkMode={isDarkMode}
-              editingTaskId={editingTaskId}
-              editingTaskTitle={editingTaskTitle}
-              setEditingTaskTitle={setEditingTaskTitle}
-              setEditingTaskId={setEditingTaskId}
-              openTaskDropdownId={openTaskDropdownId}
-              setOpenTaskDropdownId={setOpenTaskDropdownId}
-              handleDeleteTask={handleDeleteTask}
-              handleSaveTask={handleSaveTask}
-              handleCancelEdit={handleCancelEdit}
-              handleOpenTaskDetail={handleOpenTaskDetail}
+        <div className="space-y-2">
+          {addingTaskColumnId === column.id ? (
+            <input
+              type="text"
+              value={editingTaskTitle}
+              onChange={(e) => setEditingTaskTitle(e.target.value)}
+              placeholder="Task title..."
+              className={`w-full font-semibold text-sm mb-2 px-3 py-2 rounded-lg focus:outline-none ${
+                isDarkMode
+                  ? 'bg-gray-600 text-white border-gray-500 placeholder-gray-400'
+                  : 'bg-white text-gray-900 border-gray-300 placeholder-gray-500'
+              }`}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveNewTask(column.id);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleCancelNewTask();
+                }
+              }}
+              onBlur={() => handleSaveNewTask(column.id)}
             />
-            ))}
-          </div>
-        </SortableContext>
+          ) : null}
+          {column.tasks.length === 0 ? (
+            // Empty state placeholder
+            <div className={`min-h-[100px] rounded-lg border-2 border-dashed ${
+              isDarkMode ? 'border-gray-600' : 'border-gray-300'
+            } flex items-center justify-center`}>
+              <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                No tasks yet
+              </span>
+            </div>
+          ) : (
+            column.tasks
+              .sort((a, b) => {
+                // Sort pinned tasks to the top
+                const aPinned = (a as any).pinned || false;
+                const bPinned = (b as any).pinned || false;
+                if (aPinned && !bPinned) return -1;
+                if (!aPinned && bPinned) return 1;
+                return 0;
+              })
+              .map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                columnId={column.id}
+                isDarkMode={isDarkMode}
+                handleDeleteTask={handleDeleteTask}
+                handleOpenTaskDetail={handleOpenTaskDetail}
+                onTaskMove={onTaskMove}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

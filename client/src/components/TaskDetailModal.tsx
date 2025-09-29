@@ -61,6 +61,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     type: 'error',
   });
 
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+
   const [commentCount, setCommentCount] = useState(0);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -98,6 +100,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       const details = await taskService.getTaskDetails(taskId);
       setTaskDetails(details);
 
+      // Dispatch custom event to notify FacilityView of the update
+      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+        detail: details.task
+      });
+      window.dispatchEvent(taskUpdatedEvent);
+
       // Fetch project to get facilityId and owner
       if (details.task.projectId) {
         const project = await projectService.getById(details.task.projectId);
@@ -127,17 +135,25 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       const updatedTask = await taskService.update(taskDetails.task.id, { [field]: value });
       
       // Update the task details state with the response from the server
+      const updatedTaskData = {
+        ...taskDetails.task,
+        [field]: value,
+        updatedAt: updatedTask.updatedAt
+      };
+      
       setTaskDetails(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          task: {
-            ...prev.task,
-            [field]: value,
-            updatedAt: updatedTask.updatedAt
-          }
+          task: updatedTaskData
         };
       });
+      
+      // Dispatch custom event to notify FacilityView of the update
+      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+        detail: updatedTaskData
+      });
+      window.dispatchEvent(taskUpdatedEvent);
       
       setWarningToast({ isVisible: true, message: 'Task updated successfully', type: 'success' });
     } catch (err) {
@@ -151,8 +167,19 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     if (!taskDetails) return;
     setTitleSaving(true);
     try {
-      await taskService.update(taskDetails.task.id, { title });
+      const updatedTask = await taskService.update(taskDetails.task.id, { title });
       await loadTaskDetails();
+      
+      // Dispatch custom event to notify FacilityView of the update
+      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+        detail: {
+          ...taskDetails.task,
+          title,
+          updatedAt: updatedTask.updatedAt
+        }
+      });
+      window.dispatchEvent(taskUpdatedEvent);
+      
       setWarningToast({ isVisible: true, message: 'Title updated', type: 'success' });
     } catch (err) {
       console.error('Failed to update title:', err);
@@ -165,13 +192,83 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const handleStatusChange = async (status: Task['status']) => {
     if (!taskDetails) return;
     try {
-      await taskService.update(taskDetails.task.id, { status });
+      const updatedTask = await taskService.update(taskDetails.task.id, { status });
       await loadTaskDetails();
+      
+      // Dispatch custom event to notify FacilityView of the update
+      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+        detail: {
+          ...taskDetails.task,
+          status,
+          updatedAt: updatedTask.updatedAt
+        }
+      });
+      window.dispatchEvent(taskUpdatedEvent);
+      
       setWarningToast({ isVisible: true, message: 'Status updated', type: 'success' });
     } catch (err) {
       console.error('Failed to update status:', err);
       setWarningToast({ isVisible: true, message: 'Failed to update status', type: 'error' });
     }
+  };
+
+  const handlePinChange = async (pinned: boolean) => {
+    if (!taskDetails) return;
+    try {
+      const updatedTask = await taskService.pin(taskDetails.task.id, pinned);
+      await loadTaskDetails();
+      
+      // Dispatch custom event to notify FacilityView of the update
+      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+        detail: {
+          ...taskDetails.task,
+          pinned,
+          updatedAt: updatedTask.updatedAt
+        }
+      });
+      window.dispatchEvent(taskUpdatedEvent);
+      
+      setWarningToast({ 
+        isVisible: true, 
+        message: pinned ? 'Task pinned successfully!' : 'Task unpinned successfully!', 
+        type: 'success' 
+      });
+    } catch (err) {
+      console.error('Failed to pin task:', err);
+      setWarningToast({ isVisible: true, message: 'Failed to update pin status', type: 'error' });
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirmation(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!taskDetails) return;
+    try {
+      await taskService.delete(taskDetails.task.id);
+      setShowDeleteConfirmation(false);
+      onClose(); // Close the modal after successful deletion
+      
+      // Dispatch custom event to notify FacilityView of the deletion
+      const taskDeletedEvent = new CustomEvent('taskDeleted', {
+        detail: { taskId: taskDetails.task.id }
+      });
+      window.dispatchEvent(taskDeletedEvent);
+      
+      setWarningToast({ 
+        isVisible: true, 
+        message: 'Task deleted successfully!', 
+        type: 'success' 
+      });
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      setWarningToast({ isVisible: true, message: 'Failed to delete task', type: 'error' });
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirmation(false);
   };
 
   // UI helpers
@@ -230,13 +327,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
               onFieldChange={handleFieldChange}
               onSaveTitle={handleSaveTitle}
               onStatusChange={handleStatusChange}
+              onPinChange={handlePinChange}
+              onDeleteClick={handleDeleteClick}
             />
 
             {/* Tabs */}
             <div className={`sticky top-[64px] z-30 px-4 sm:px-6 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/95 backdrop-blur' : 'border-gray-200 bg-white/95 backdrop-blur'}`}>
-              <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <div className="flex items-center justify-between py-2">
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'overview'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -250,7 +349,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   <span className="sm:hidden">Overview</span>
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'comments'
                       ? 'bg-green-600 text-white'
                       : isDarkMode
@@ -272,7 +371,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   )}
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'attachments'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -291,7 +390,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   )}
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'dependencies'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -310,7 +409,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   )}
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'subtasks'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -329,7 +428,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   )}
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'timelogs'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -348,7 +447,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   )}
                 </button>
                 <button
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'activity'
                       ? 'bg-brand text-white'
                       : isDarkMode
@@ -476,6 +575,18 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
             type={warningToast.type === 'success' ? 'success' : 'error'}
           />
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmationDialog
+          isOpen={showDeleteConfirmation}
+          title="Delete Task"
+          message={`Are you sure you want to delete "${taskDetails?.task.title}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+          variant="danger"
+        />
       </div>
     </div>
   );

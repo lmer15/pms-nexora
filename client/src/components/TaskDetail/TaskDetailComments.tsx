@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LucideMessageSquare, LucideSend, LucideSmile, LucideMoreVertical, LucideEdit, LucideTrash2, LucideCheck, LucideX, LucideBold, LucideItalic, LucideUnderline, LucidePaperclip, LucideAtSign, LucideLink, LucideThumbsUp, LucideThumbsDown, LucideReply, LucideChevronDown } from 'lucide-react';
+import { LucideMessageSquare, LucideSend, LucideSmile, LucideMoreVertical, LucideEdit, LucideTrash2, LucideCheck, LucideX, LucideBold, LucideItalic, LucideUnderline, LucidePaperclip, LucideAtSign, LucideThumbsUp, LucideThumbsDown, LucideReply, LucideChevronDown } from 'lucide-react';
 import { Picker } from 'emoji-mart';
 import { TaskComment } from '../../api/taskService';
 import { Button } from '../ui/button';
@@ -384,36 +384,28 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
     }
   };
 
-  // Handle link button click
-  const handleLinkClick = () => {
-    const contentEditable = document.querySelector('[data-placeholder="Add comment..."]') as HTMLElement;
-    if (contentEditable) {
-      contentEditable.focus();
-      
-      // Add link placeholder
-      const currentText = contentEditable.textContent || '';
-      const newText = currentText + '[Link text](https://example.com)';
-      contentEditable.textContent = newText;
-      
-      // Update state
-      setNewComment(newText);
-      
-      // Position cursor at the end
-      const range = document.createRange();
-      const sel = window.getSelection();
-      range.selectNodeContents(contentEditable);
-      range.collapse(false);
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
-  };
 
-  // Render formatted text with @mention highlighting
+  // Render formatted text with @mention highlighting and automatic link detection
   const renderFormattedText = (content: string) => {
     if (!content) return content;
     
-    // Process @mentions to add green styling
-    const processedContent = content.replace(
+    let processedContent = content;
+    
+    // First, process URLs to make them clickable
+    // This regex matches various URL formats including http, https, ftp, www, and domain names
+    const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|ftp:\/\/[^\s<>"{}|\\^`[\]]+|www\.[^\s<>"{}|\\^`[\]]+|[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\/[^\s<>"{}|\\^`[\]]*)?)/g;
+    processedContent = processedContent.replace(urlRegex, (url) => {
+      // Clean up the URL (remove trailing punctuation that might not be part of the URL)
+      const cleanUrl = url.replace(/[.,;:!?]+$/, '');
+      const trailingPunctuation = url.slice(cleanUrl.length);
+      
+      // Ensure protocol is present
+      const href = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline decoration-1 underline-offset-2 hover:decoration-2 transition-all duration-200">${cleanUrl}</a>${trailingPunctuation}`;
+    });
+    
+    // Then process @mentions to add green styling
+    processedContent = processedContent.replace(
       /@(\w+(?:\s+\w+)*)/g, 
       '<span class="text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-1 py-0.5 rounded">@$1</span>'
     );
@@ -678,16 +670,6 @@ const TaskDetailComments: React.FC<TaskDetailCommentsProps> = ({ taskId, isDarkM
                   title="Mention someone"
                 >
                   <LucideAtSign className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleLinkClick()}
-                  className={`p-2 rounded hover:bg-opacity-20 ${
-                    isDarkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-200 text-gray-600'
-                  }`}
-                  title="Add link"
-                >
-                  <LucideLink className="w-4 h-4" />
                 </button>
               </div>
               

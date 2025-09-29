@@ -41,8 +41,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
     }
   };
 
-  const handleFacilityCreated = (newFacility: Facility) => {
-    setFacilities(prev => [...prev, newFacility]);
+  const handleCreateFacility = async (facilityData: { name: string }) => {
+    try {
+      const newFacility = await facilityService.create(facilityData);
+      setFacilities(prev => [...prev, newFacility]);
+    } catch (error) {
+      console.error('Error creating facility:', error);
+      throw error;
+    }
   };
 
   return (
@@ -308,9 +314,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
       <CreateFacilityModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onFacilityCreated={handleFacilityCreated}
+        onCreate={handleCreateFacility}
         isDarkMode={isDarkMode}
-        isSidebarCollapsed={isCollapsed}
       />
     </>
   );

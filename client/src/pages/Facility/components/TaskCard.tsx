@@ -1,6 +1,4 @@
 import React, { useState, MouseEvent, KeyboardEvent, useEffect, useRef } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import {
   LucideTrash2,
   LucideUser,
@@ -15,7 +13,10 @@ import {
   LucideEye,
   LucideArchive,
   LucideCopy,
+  LucidePin,
 } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { Card, Button } from '../../../components/ui';
 import { Task } from '../types';
 import { taskService } from '../../../api/taskService';
@@ -27,6 +28,7 @@ interface TaskCardProps {
   handleDeleteTask: (taskId: string, taskTitle: string, columnId: string) => void;
   handleOpenTaskDetail: (taskId: string) => void;
   isDeleting?: boolean;
+  onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
@@ -36,15 +38,54 @@ const TaskCard: React.FC<TaskCardProps> = ({
   handleDeleteTask,
   handleOpenTaskDetail,
   isDeleting = false,
+  onTaskMove,
 }) => {
-  const [dragStarted, setDragStarted] = useState(false);
-  const [justDragged, setJustDragged] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [currentTask, setCurrentTask] = useState(task);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Drag and drop functionality
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging: isDndDragging,
+  } = useDraggable({
+    id: `task-${currentTask.id}`,
+    data: {
+      type: 'task',
+      task: currentTask,
+      columnId: columnId,
+    },
+  });
+
+  // Create modified listeners that exclude button areas and prevent dragging pinned tasks
+  const modifiedListeners = {
+    ...listeners,
+    onPointerDown: (e: any) => {
+      // Don't start drag if clicking on buttons
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.tagName === 'BUTTON') {
+        return;
+      }
+      // Don't start drag if task is pinned
+      if ((currentTask as any).pinned) {
+        return;
+      }
+      if (listeners?.onPointerDown) {
+        listeners.onPointerDown(e);
+      }
+    },
+  };
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+  };
 
   // Update current task when prop changes (real-time updates)
   useEffect(() => {
@@ -64,7 +105,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   useEffect(() => {
     const fetchAllAssigneeProfiles = async () => {
       const taskAny = currentTask as any;
-      const assigneeIds = taskAny.assigneeIds || [];
+      // Use assignees field (not assigneeIds) to match the Task interface
+      const assigneeIds = taskAny.assignees || taskAny.assigneeIds || [];
       
       if (assigneeIds.length > 0) {
         setLoadingProfiles(true);
@@ -85,64 +127,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
     fetchAllAssigneeProfiles();
   }, [currentTask]);
 
-  const {
-    attributes,
-    listeners: defaultListeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
-
-  // Enhanced drag handlers to prevent modal conflicts
-  const listeners = {
-    ...defaultListeners,
-    onPointerDown: (event: any) => {
-      setDragStarted(true);
-      setJustDragged(false);
-      if (typeof (defaultListeners as any).onPointerDown === 'function') {
-        (defaultListeners as any).onPointerDown(event);
-      }
-    },
-    onPointerUp: (event: any) => {
-      setDragStarted(false);
-      setJustDragged(true);
-      setTimeout(() => setJustDragged(false), 300); // Increased timeout for better UX
-      if (typeof (defaultListeners as any).onPointerUp === 'function') {
-        (defaultListeners as any).onPointerUp(event);
-      }
-    },
-    onKeyDown: (event: KeyboardEvent) => {
-      // Allow space/enter to open modal when not dragging
-      if ((event.key === 'Enter' || event.key === ' ') && !isDragging) {
-        event.preventDefault();
-        handleOpenTaskDetail(currentTask.id);
-      }
-      if (typeof (defaultListeners as any).onKeyDown === 'function') {
-        (defaultListeners as any).onKeyDown(event);
-      }
-    },
-  };
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   // Improved click handler with better event detection
   const handleTaskClick = (e: MouseEvent<HTMLDivElement>) => {
-    // Prevent opening modal during drag operations
-    if (isDragging || justDragged || dragStarted) {
+    // Check if click originated from interactive elements or buttons
+    const target = e.target as HTMLElement;
+    
+    // Check if the click is on a button or within a button
+    if (target.closest('button') || target.tagName === 'BUTTON') {
       return;
     }
-
-    // Check if click originated from interactive elements
+    
+    // Check if click originated from other interactive elements
     const interactiveElements = [
-      'button', 'input', 'textarea', 'select', 'a', 
+      'input', 'textarea', 'select', 'a', 
       '[role="button"]', '[contenteditable="true"]'
     ];
     
-    const target = e.target as HTMLElement;
     const isInteractiveElement = interactiveElements.some(selector => 
       target.closest(selector)
     );
@@ -174,11 +175,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
     handleOpenTaskDetail(currentTask.id);
   };
 
-  // Prevent quick actions from showing during drag
   const handleMouseEnter = () => {
-    if (!isDragging) {
-      setShowQuickActions(true);
-    }
+    setShowQuickActions(true);
   };
 
   const handleMouseLeave = () => {
@@ -252,16 +250,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
   return (
     <Card
       ref={(node) => {
-        setNodeRef(node);
         if (node) {
           (cardRef as any).current = node;
+          setNodeRef(node);
         }
       }}
-      style={style}
-      {...attributes}
-      {...listeners}
-      role="button"
-      tabIndex={0}
       aria-label={`Task: ${currentTask.title}. Status: ${getStatusText(currentTask.status)}. Click to view details.`}
       onClick={handleTaskClick}
       onMouseEnter={handleMouseEnter}
@@ -272,19 +265,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
           handleOpenTaskDetail(currentTask.id);
         }
       }}
+      style={style}
+      {...attributes}
+      {...modifiedListeners}
         className={`
-          group cursor-pointer transition-all duration-200 ease-out
-          ${isDragging ? 'opacity-50 rotate-1 scale-105 shadow-xl z-50' : ''}
+          group task-card drag-transition
+          ${(currentTask as any).pinned ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}
           ${isUpdating ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}
+          ${isDndDragging ? 'task-card-dragging' : ''}
           ${isDarkMode 
             ? 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:shadow-lg' 
             : 'bg-white border-gray-200 hover:bg-gray-50 hover:shadow-lg'
           }
-          hover:-translate-y-0.5
           focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
           rounded-lg shadow-sm p-0 overflow-hidden
           mb-2
-          ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}
         `}
     >
       {/* Card Content */}
@@ -292,6 +287,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
         {/* Header with Status and Quick Actions */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
+            {/* Pin indicator */}
+            {(currentTask as any).pinned && (
+              <div className="flex items-center">
+                <LucidePin className="w-3 h-3 text-green-600 dark:text-green-400 fill-current" />
+              </div>
+            )}
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border ${getStatusColorClasses(currentTask.status)}`}
               aria-label={`Status: ${getStatusText(currentTask.status)}`}
@@ -303,26 +304,74 @@ const TaskCard: React.FC<TaskCardProps> = ({
           
           {/* Quick Actions - Show on hover and when not dragging */}
           <div className={`flex items-center gap-1 transition-all duration-200 ${
-            showQuickActions && !isDragging ? 'opacity-100' : 'opacity-0'
+            showQuickActions ? 'opacity-100' : 'opacity-0'
           }`}>
                     <Button
-                      onClick={openDetails}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        openDetails(e);
+                      }}
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 p-0 hover:bg-green-100 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400"
                       aria-label={`View details for task: ${currentTask.title}`}
-                      onMouseDown={(e) => e.stopPropagation()} // Prevent drag start
+                      draggable={false}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                      onMouseUp={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                      onDragStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrag={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDragEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                     >
                       <LucideEye className="w-4 h-4 text-green-600 dark:text-green-400" />
                     </Button>
             <Button
-              onClick={handleDeleteClick}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleDeleteClick(e);
+              }}
               variant="ghost"
               size="sm"
               disabled={isDeleting}
               className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
               aria-label={`Delete task: ${currentTask.title}`}
-              onMouseDown={(e) => e.stopPropagation()} // Prevent drag start
+              draggable={false}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onDragStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrag={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDragEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
             >
               <LucideTrash2 className="w-4 h-4" />
             </Button>
@@ -348,7 +397,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center">
             {(() => {
               const taskAny = currentTask as any;
-              const assigneeIds = taskAny.assigneeIds || [];
+              // Use assignees field (not assigneeIds) to match the Task interface
+              const assigneeIds = taskAny.assignees || taskAny.assigneeIds || [];
               const hasAssignees = assigneeIds.length > 0;
               
               if (!hasAssignees) {

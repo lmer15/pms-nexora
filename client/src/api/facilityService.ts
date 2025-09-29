@@ -4,9 +4,13 @@ export interface Facility {
   id: string;
   name: string;
   description?: string;
+  status: 'active' | 'inactive' | 'archived';
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  memberCount?: number;
+  projectCount?: number;
+  taskCount?: number;
 }
 
 export interface FacilityMember {
@@ -17,6 +21,12 @@ export interface FacilityMember {
   role: string;
   joinedAt: string;
   isOwner: boolean;
+}
+
+export interface FacilityStats {
+  memberCount: number;
+  projectCount: number;
+  taskCount: number;
 }
 
 export const facilityService = {
@@ -33,7 +43,7 @@ export const facilityService = {
   },
 
   // Create new facility
-  create: async (facilityData: Omit<Facility, 'id' | 'createdAt' | 'updatedAt' | 'ownerId'>): Promise<Facility> => {
+  create: async (facilityData: { name: string; description?: string; status?: 'active' | 'inactive' | 'archived' }): Promise<Facility> => {
     const response = await api.post('/facilities', facilityData);
     return response.data;
   },
@@ -53,5 +63,17 @@ export const facilityService = {
   getFacilityMembers: async (facilityId: string): Promise<FacilityMember[]> => {
     const response = await api.get(`/facilities/${facilityId}/members`);
     return response.data.members;
+  },
+
+  // Get facility statistics
+  getFacilityStats: async (facilityId: string): Promise<FacilityStats> => {
+    const response = await api.get(`/facilities/${facilityId}/stats`);
+    return response.data;
+  },
+
+  // Update facility status
+  updateStatus: async (facilityId: string, status: 'active' | 'inactive' | 'archived'): Promise<Facility> => {
+    const response = await api.put(`/facilities/${facilityId}`, { status });
+    return response.data;
   },
 };

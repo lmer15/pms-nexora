@@ -19,6 +19,7 @@ export interface Task {
   progress?: number;
   tags?: string[];
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  pinned?: boolean;
 }
 
 export interface CreateTaskData {
@@ -35,6 +36,7 @@ export interface CreateTaskData {
   progress?: number;
   tags?: string[];
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  pinned?: boolean;
 }
 
 export interface TaskComment {
@@ -150,6 +152,11 @@ const taskService = {
 
   update: async (id: string, taskData: Partial<CreateTaskData>): Promise<Task> => {
     const response = await api.put(`/tasks/${id}`, taskData);
+    return response.data;
+  },
+
+  pin: async (id: string, pinned: boolean): Promise<Task> => {
+    const response = await api.put(`/tasks/${id}/pin`, { pinned });
     return response.data;
   },
 

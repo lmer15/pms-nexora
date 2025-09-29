@@ -21,6 +21,7 @@ const {
   searchUsers,
   sendInvitation,
   getFacilityMembers,
+  getFacilityStats,
   updateMemberRole,
   removeMember,
   generateShareLink,
@@ -48,6 +49,7 @@ router.get('/search/users', authMiddleware, searchUsers);
 
 // Member management routes
 router.get('/:facilityId/members', authMiddleware, canViewFacility, getFacilityMembers);
+router.get('/:facilityId/stats', authMiddleware, canViewFacility, getFacilityStats);
 router.put('/:facilityId/members/role', authMiddleware, canManageMembers, validateRole, canUpdateMemberRole, updateMemberRole);
 router.delete('/:facilityId/members', authMiddleware, canManageMembers, removeMember);
 router.post('/:facilityId/leave', authMiddleware, canViewFacility, leaveFacility);

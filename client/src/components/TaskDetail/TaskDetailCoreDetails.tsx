@@ -61,7 +61,11 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   const [assigneeSearch, setAssigneeSearch] = React.useState('');
   const [newTag, setNewTag] = React.useState('');
   const [showTagInput, setShowTagInput] = React.useState(false);
+  const [tagSuggestions, setTagSuggestions] = React.useState<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = React.useState(false);
+  const [recentTags, setRecentTags] = React.useState<string[]>([]);
   const priorityDropdownRef = React.useRef<HTMLDivElement>(null);
+  const tagInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (facilityId) {
@@ -121,6 +125,66 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
 
   const currentTags: string[] = (editedTask.tags ?? task.tags ?? []) as string[];
 
+  // Predefined tag suggestions organized by category
+  const predefinedTags = {
+    priority: ['urgent', 'high-priority', 'low-priority', 'critical'],
+    type: ['bug', 'feature', 'enhancement', 'documentation', 'testing', 'research'],
+    status: ['blocked', 'waiting-review', 'in-review', 'ready-for-testing'],
+    team: ['frontend', 'backend', 'design', 'devops', 'marketing'],
+    time: ['quick-win', 'sprint-goal', 'technical-debt'],
+    client: ['client-urgent', 'internal', 'client-request']
+  };
+
+  // Get tag suggestions based on input
+  const getTagSuggestions = (input: string) => {
+    if (!input.trim()) {
+      // Show recent tags and popular predefined tags when input is empty
+      const popularTags = [
+        'bug', 'feature', 'urgent', 'frontend', 'backend', 
+        'testing', 'documentation', 'enhancement', 'quick-win'
+      ];
+      return [...recentTags, ...popularTags.filter(tag => !recentTags.includes(tag))].slice(0, 8);
+    }
+
+    const allPredefinedTags = Object.values(predefinedTags).flat();
+    const matchingTags = allPredefinedTags.filter(tag => 
+      tag.toLowerCase().includes(input.toLowerCase()) && 
+      !currentTags.includes(tag)
+    );
+    
+    return matchingTags.slice(0, 6);
+  };
+
+  // Handle tag input change with suggestions
+  const handleTagInputChange = (value: string) => {
+    setNewTag(value);
+    const suggestions = getTagSuggestions(value);
+    setTagSuggestions(suggestions);
+    setShowTagSuggestions(suggestions.length > 0);
+  };
+
+  // Add tag from suggestion
+  const addTagFromSuggestion = async (tag: string) => {
+    if (currentTags.includes(tag)) return;
+    
+    const next = [...currentTags, tag];
+    handleInputChange('tags', next);
+    setNewTag('');
+    setShowTagSuggestions(false);
+    
+    // Update recent tags
+    setRecentTags(prev => [tag, ...prev.filter(t => t !== tag)].slice(0, 10));
+    
+    // Auto-save to database
+    try {
+      if (onFieldChangeAndSave) {
+        await onFieldChangeAndSave('tags', next);
+      }
+    } catch (error) {
+      console.error('Failed to save tags:', error);
+    }
+  };
+
   const handleAddTag = async () => {
     const value = newTag.trim();
     if (!value) return;
@@ -132,6 +196,10 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     handleInputChange('tags', next);
     setNewTag('');
     setShowTagInput(false); // Hide input after adding
+    setShowTagSuggestions(false);
+    
+    // Update recent tags
+    setRecentTags(prev => [value, ...prev.filter(t => t !== value)].slice(0, 10));
     
     // Auto-save to database
     try {
@@ -224,8 +292,59 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     return 'bg-gray-400';
   };
 
+  const getProgressColorWithGradient = (progress: number) => {
+    if (progress >= 80) return 'bg-gradient-to-r from-green-400 to-green-600';
+    if (progress >= 50) return 'bg-gradient-to-r from-blue-400 to-blue-600';
+    if (progress >= 25) return 'bg-gradient-to-r from-yellow-400 to-yellow-600';
+    return 'bg-gradient-to-r from-gray-400 to-gray-500';
+  };
+
+  const getProgressStatus = (progress: number) => {
+    if (progress >= 80) return 'Excellent';
+    if (progress >= 50) return 'Good';
+    if (progress >= 25) return 'In Progress';
+    return 'Getting Started';
+  };
+
+  // Safely render activity content, handling HTML tags and plain text
+  const renderActivityContent = (content: string) => {
+    if (!content) return content;
+    
+    // Check if content contains HTML tags
+    const hasHtmlTags = /<[^>]*>/g.test(content);
+    
+    if (hasHtmlTags) {
+      // Clean up common HTML issues and render safely
+      let cleanContent = content
+        // Remove empty divs with just breaks
+        .replace(/<div><br\s*\/?><\/div>/gi, '')
+        // Convert div breaks to line breaks
+        .replace(/<div><br\s*\/?><\/div>/gi, '<br>')
+        // Clean up empty paragraphs
+        .replace(/<p><br\s*\/?><\/p>/gi, '')
+        // Convert paragraph breaks to line breaks
+        .replace(/<p><br\s*\/?><\/p>/gi, '<br>')
+        // Remove empty tags
+        .replace(/<(\w+)><\/\1>/gi, '')
+        // Trim whitespace
+        .trim();
+      
+      // If content is empty after cleaning, return a placeholder
+      if (!cleanContent || cleanContent === '') {
+        return <span className="italic opacity-60">Empty content</span>;
+      }
+      
+      return <span dangerouslySetInnerHTML={{ __html: cleanContent }} />;
+    } else {
+      // If it's plain text, return as is
+      return content;
+    }
+  };
+
   // Calculate progress from subtasks
-  const calculatedProgress = subtasks.length > 0 ? Math.round((subtasks.filter(st => st.completed).length / subtasks.length) * 100) : 0;
+  const safeSubtasks = subtasks || [];
+  const completedSubtasks = safeSubtasks.filter(st => st && st.completed === true);
+  const calculatedProgress = safeSubtasks.length > 0 ? Math.round((completedSubtasks.length / safeSubtasks.length) * 100) : 0;
 
   // Calculate dependency summary
   const blockedByCount = dependencies.filter(dep => dep.dependencyType === 'blocked-by').length;
@@ -233,8 +352,20 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   const relatedCount = dependencies.filter(dep => dep.dependencyType === 'related').length;
   const totalDependencies = dependencies.length;
 
-  // Use task progress if set, otherwise calculated from subtasks
-  const displayProgress = task.progress !== undefined ? task.progress : calculatedProgress;
+  // Use calculated progress from subtasks if subtasks exist, otherwise use manual task progress
+  const displayProgress = safeSubtasks.length > 0 ? calculatedProgress : (task.progress !== undefined ? task.progress : 0);
+  
+  // Debug logging (remove in production)
+  if (safeSubtasks.length > 0) {
+    console.log('Progress Debug:', {
+      totalSubtasks: safeSubtasks.length,
+      completedSubtasks: completedSubtasks.length,
+      calculatedProgress,
+      displayProgress,
+      taskProgress: task.progress,
+      subtasksData: safeSubtasks.map(st => ({ id: st.id, title: st.title, completed: st.completed }))
+    });
+  }
 
   // Combine and sort recent activities
   const recentActivities = [
@@ -624,47 +755,143 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                   </Button>
                 )}
               </div>
-              {subtasks.length > 0 ? (
-                <div className="space-y-2">
-                  {/* Progress Bar */}
-                  <div className="flex items-center gap-2">
-                    <div className={`flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2`}>
-                      <div
-                        className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(displayProgress)}`}
-                        style={{ width: `${displayProgress}%` }}
-                      />
+              {safeSubtasks.length > 0 ? (
+                <div className="space-y-3">
+                  {/* Progress Bar with Enhanced Styling */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Progress
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          displayProgress >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                          displayProgress >= 50 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                          displayProgress >= 25 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>
+                          {getProgressStatus(displayProgress)}
+                        </span>
+                        <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {displayProgress}%
+                        </span>
+                      </div>
                     </div>
-                    <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                      {displayProgress}%
-                    </span>
+                    <div className="relative group">
+                      <div className={`flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3 shadow-inner`}>
+                        <div
+                          className={`h-3 rounded-full transition-all duration-500 ease-out ${getProgressColorWithGradient(displayProgress)} shadow-sm relative overflow-hidden`}
+                          style={{ width: `${displayProgress}%` }}
+                        >
+                          {/* Animated shimmer effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      </div>
+                      {/* Tooltip */}
+                      <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 ${
+                        isDarkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-900 border border-gray-200'
+                      }`}>
+                        <div className="text-center">
+                          <div className="font-semibold">{displayProgress}% Complete</div>
+                          <div className="text-xs opacity-75">{completedSubtasks.length} of {safeSubtasks.length} subtasks done</div>
+                        </div>
+                        {/* Tooltip arrow */}
+                        <div className={`absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent ${
+                          isDarkMode ? 'border-t-gray-800' : 'border-t-white'
+                        }`}></div>
+                      </div>
+                    </div>
                   </div>
-                  {/* Subtask Count */}
-                  <div className={`text-sm ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
-                    {subtasks.filter(st => st.completed).length} of {subtasks.length} completed
+                  {/* Subtask Count with Enhanced Styling */}
+                  <div className={`flex items-center justify-between text-sm p-2 rounded-lg ${
+                    isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
+                  }`}>
+                    <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Subtask Progress
+                    </span>
+                    <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                      {completedSubtasks.length} of {safeSubtasks.length} completed
+                    </span>
                   </div>
                 </div>
               ) : task.progress !== undefined ? (
-                <div className="space-y-2">
-                  {/* Manual Progress Bar */}
-                  <div className="flex items-center gap-2">
-                    <div className={`flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2`}>
-                      <div
-                        className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(displayProgress)}`}
-                        style={{ width: `${displayProgress}%` }}
-                      />
+                <div className="space-y-3">
+                  {/* Manual Progress Bar with Enhanced Styling */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Progress
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          displayProgress >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                          displayProgress >= 50 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                          displayProgress >= 25 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>
+                          {getProgressStatus(displayProgress)}
+                        </span>
+                        <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {displayProgress}%
+                        </span>
+                      </div>
                     </div>
-                    <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                      {displayProgress}%
-                    </span>
+                    <div className="relative group">
+                      <div className={`flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3 shadow-inner`}>
+                        <div
+                          className={`h-3 rounded-full transition-all duration-500 ease-out ${getProgressColorWithGradient(displayProgress)} shadow-sm relative overflow-hidden`}
+                          style={{ width: `${displayProgress}%` }}
+                        >
+                          {/* Animated shimmer effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      </div>
+                      {/* Tooltip */}
+                      <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 ${
+                        isDarkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-900 border border-gray-200'
+                      }`}>
+                        <div className="text-center">
+                          <div className="font-semibold">{displayProgress}% Complete</div>
+                          <div className="text-xs opacity-75">Manual progress tracking</div>
+                        </div>
+                        {/* Tooltip arrow */}
+                        <div className={`absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent ${
+                          isDarkMode ? 'border-t-gray-800' : 'border-t-white'
+                        }`}></div>
+                      </div>
+                    </div>
                   </div>
-                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Manual progress tracking
+                  {/* Manual Progress Info */}
+                  <div className={`flex items-center justify-between text-sm p-2 rounded-lg ${
+                    isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
+                  }`}>
+                    <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Progress Type
+                    </span>
+                    <span className={`font-medium ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                      Manual tracking
+                    </span>
                   </div>
                 </div>
               ) : (
-                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  No progress tracking
-                </p>
+                <div className="space-y-3">
+                  {/* No Progress State */}
+                  <div className={`text-center p-4 rounded-lg border-2 border-dashed ${
+                    isDarkMode ? 'border-gray-600 bg-gray-800/50' : 'border-gray-300 bg-gray-50'
+                  }`}>
+                    <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                      isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                    }`}>
+                      <LucideTrendingUp className={`w-6 h-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    </div>
+                    <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      No Progress Tracking
+                    </p>
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Add subtasks or set manual progress to track completion
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -770,19 +997,34 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <input
+                      ref={tagInputRef}
                       type="text"
                       value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
+                      onChange={(e) => handleTagInputChange(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          handleAddTag();
+                          if (tagSuggestions.length > 0) {
+                            addTagFromSuggestion(tagSuggestions[0]);
+                          } else {
+                            handleAddTag();
+                          }
                         } else if (e.key === 'Escape') {
                           setShowTagInput(false);
                           setNewTag('');
+                          setShowTagSuggestions(false);
                         }
                       }}
-                      placeholder="Type a tag name..."
+                      onFocus={() => {
+                        const suggestions = getTagSuggestions(newTag);
+                        setTagSuggestions(suggestions);
+                        setShowTagSuggestions(suggestions.length > 0);
+                      }}
+                      onBlur={() => {
+                        // Delay hiding suggestions to allow clicking on them
+                        setTimeout(() => setShowTagSuggestions(false), 200);
+                      }}
+                      placeholder="Type a tag name or select from suggestions..."
                       className={`w-full px-3 py-2 pl-10 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all ${
                         isDarkMode 
                           ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-750' 
@@ -793,6 +1035,34 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                     <LucideTag className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
                       isDarkMode ? 'text-gray-400' : 'text-gray-500'
                     }`} />
+                    
+                    {/* Tag Suggestions Dropdown */}
+                    {showTagSuggestions && tagSuggestions.length > 0 && (
+                      <div className={`absolute top-full left-0 right-0 mt-1 border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto ${
+                        isDarkMode 
+                          ? 'bg-gray-800 border-gray-600' 
+                          : 'bg-white border-gray-300'
+                      }`}>
+                        {tagSuggestions.map((suggestion, index) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => addTagFromSuggestion(suggestion)}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-opacity-50 transition-colors ${
+                              index === 0 ? 'bg-brand/10' : ''
+                            } ${
+                              isDarkMode 
+                                ? 'text-gray-300 hover:bg-gray-700' 
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <LucideTag className="w-3 h-3 opacity-50" />
+                              <span>{suggestion}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <Button 
                     size="sm" 
@@ -906,9 +1176,9 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
               <div className="space-y-2">
                 {recentActivities.map((activity, index) => (
                   <div key={index} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                    <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                      {activity.type === 'comment' ? activity.content : activity.description}
-                    </p>
+                    <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {renderActivityContent(activity.type === 'comment' ? activity.content : activity.description)}
+                    </div>
                     <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       {formatDate(activity.createdAt || activity.timestamp)}
                     </p>

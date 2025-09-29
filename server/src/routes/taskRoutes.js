@@ -9,6 +9,7 @@ const {
   getTasksByUser,
   createTask,
   updateTask,
+  pinTask,
   deleteTask
 } = require('../controllers/taskController');
 
@@ -28,6 +29,7 @@ router.get('/project/:projectId', authMiddleware, getTasksByProject);
 router.get('/user/:userId', authMiddleware, getTasksByUser);
 router.post('/', authMiddleware, createTask);
 router.put('/:id', authMiddleware, updateTask);
+router.put('/:id/pin', authMiddleware, pinTask);
 router.delete('/:id', authMiddleware, deleteTask);
 
 // Sub-routes for task details

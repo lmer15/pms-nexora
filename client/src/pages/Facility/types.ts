@@ -8,6 +8,7 @@ export interface Task {
   creatorId: string;
   createdAt: string;
   updatedAt: string;
+  tags?: string[];
 }
 
 export interface Column {

@@ -1,0 +1,90 @@
+/* Drag and Drop Styles */
+
+/* Ensure drag overlay appears above everything */
+[data-dnd-kit-drag-overlay] {
+  z-index: 9999 !important;
+}
+
+/* Improve drag preview styling */
+.drag-preview {
+  transform: scale(1.05);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 2px solid #10b981;
+  background: white;
+}
+
+.dark .drag-preview {
+  background: #1f2937;
+  border-color: #10b981;
+}
+
+/* Dragging state for task cards */
+.task-card-dragging {
+  opacity: 0.3 !important;
+  transform: scale(0.95) !important;
+  filter: blur(1px);
+  transition: all 0.2s ease-out;
+}
+
+/* Drop zone highlighting */
+.drop-zone-active {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border: 2px dashed #10b981 !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark .drop-zone-active {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border-color: #10b981 !important;
+}
+
+/* Smooth transitions for all drag states */
+.drag-transition {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ensure proper stacking context */
+.kanban-board {
+  position: relative;
+  z-index: 1;
+}
+
+.project-column {
+  position: relative;
+  z-index: 2;
+}
+
+.task-card {
+  position: relative;
+  z-index: 3;
+}
+
+/* Drag overlay specific styles */
+.drag-overlay {
+  z-index: 9999 !important;
+  pointer-events: none;
+}
+
+/* Prevent text selection during drag */
+.dragging {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth hover effects */
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.task-card:active {
+  transform: translateY(0);
+}
+
+/* Dark mode adjustments */
+.dark .task-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+}
