@@ -23,14 +23,11 @@ const transporter = SMTP_HOST && SMTP_USER && SMTP_PASS ? nodemailer.createTrans
 const sendWelcomeEmail = async (user) => {
   // Skip if SMTP is not configured
   if (!transporter) {
-    console.log('SMTP not configured - skipping welcome email');
-    console.log('SMTP Config:', { SMTP_HOST, SMTP_USER, SMTP_PASS: SMTP_PASS ? '***' : 'missing' });
     return;
   }
 
   try {
     await transporter.verify();
-    console.log('SMTP connection verified');
     
     const mailOptions = {
       from: SMTP_FROM || SMTP_USER,
@@ -55,7 +52,6 @@ const sendWelcomeEmail = async (user) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Welcome email sent to ${user.email}`);
   } catch (error) {
     console.error('Error sending welcome email:', error);
     // Don't throw error to avoid breaking the registration process
@@ -66,13 +62,11 @@ const sendWelcomeEmail = async (user) => {
 const sendFacilityInvitationEmail = async (inviteeEmail, invitation, facility, inviterName) => {
   // Skip if SMTP is not configured
   if (!transporter) {
-    console.log('SMTP not configured - skipping facility invitation email');
     return;
   }
 
   try {
     await transporter.verify();
-    console.log('SMTP connection verified for facility invitation');
     
     const invitationUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/accept-invitation/${invitation.invitationToken}`;
     const roleDisplayName = invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1);
@@ -147,7 +141,6 @@ const sendFacilityInvitationEmail = async (inviteeEmail, invitation, facility, i
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Facility invitation email sent to ${inviteeEmail} for facility: ${facility.name}`);
     return true;
   } catch (error) {
     console.error('Error sending facility invitation email:', error);
@@ -159,13 +152,11 @@ const sendFacilityInvitationEmail = async (inviteeEmail, invitation, facility, i
 const sendFacilityInvitationToExistingUser = async (user, invitation, facility, inviterName) => {
   // Skip if SMTP is not configured
   if (!transporter) {
-    console.log('SMTP not configured - skipping facility invitation email to existing user');
     return;
   }
 
   try {
     await transporter.verify();
-    console.log('SMTP connection verified for existing user facility invitation');
     
     const invitationUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/accept-invitation/${invitation.invitationToken}`;
     const roleDisplayName = invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1);
@@ -244,7 +235,6 @@ const sendFacilityInvitationToExistingUser = async (user, invitation, facility, 
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Facility invitation email sent to existing user ${user.email} for facility: ${facility.name}`);
     return true;
   } catch (error) {
     console.error('Error sending facility invitation email to existing user:', error);

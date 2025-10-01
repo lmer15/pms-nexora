@@ -11,8 +11,10 @@ import {
   LucideEdit,
   LucideTrash2,
   LucideEye,
+  LucideBarChart3,
 } from 'lucide-react';
 import { facilityService, Facility } from '../api/facilityService';
+import { useFacility } from '../context/FacilityContext';
 import CreateFacilityModal from '../components/CreateFacilityModal';
 import EditFacilityModal from '../components/EditFacilityModal';
 import DeleteFacilityModal from '../components/DeleteFacilityModal';
@@ -31,9 +33,7 @@ const statusLabels: Record<string, string> = {
 
 const Facilities: React.FC = () => {
   const navigate = useNavigate();
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { facilities, loading, error, loadFacilities, setCurrentFacilityById, setFacilities } = useFacility();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -42,6 +42,8 @@ const Facilities: React.FC = () => {
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [operationLoading, setOperationLoading] = useState<Record<string, boolean>>({});
+  const [operationError, setOperationError] = useState<Record<string, string>>({});
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return document.documentElement.classList.contains('dark');
@@ -60,34 +62,57 @@ const Facilities: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    loadFacilities();
-  }, []);
-
-  const loadFacilities = async () => {
-    try {
-      setLoading(true);
-      const data = await facilityService.getAll();
-      setFacilities(data);
-    } catch (err) {
-      setError('Failed to load facilities');
-      console.error('Error loading facilities:', err);
-    } finally {
-      setLoading(false);
+  // Helper functions for operation state management
+  const setOperationState = (operation: string, loading: boolean, error?: string) => {
+    setOperationLoading(prev => ({ ...prev, [operation]: loading }));
+    if (error !== undefined) {
+      setOperationError(prev => ({ ...prev, [operation]: error }));
     }
   };
+
+  const clearOperationError = (operation: string) => {
+    setOperationError(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[operation];
+      return newErrors;
+    });
+  };
+
 
   const handleViewDetails = (facilityId: string) => {
     navigate(`/facility/${facilityId}`);
   };
 
+  const handleViewDashboard = (facilityId: string) => {
+    setCurrentFacilityById(facilityId);
+    navigate('/dashboard');
+  };
+
   const handleCreateFacility = async (facilityData: { name: string }) => {
+    // Create a temporary facility for optimistic update
+    const tempFacility: Facility = {
+      id: `temp-${Date.now()}`, // Temporary ID
+      name: facilityData.name,
+      status: 'active',
+      ownerId: '', // Will be set by server
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      memberCount: 1,
+      projectCount: 0,
+      taskCount: 0
+    };
+    
+    // Optimistic update - add the facility immediately
+    setFacilities([...facilities, tempFacility]);
+    
     try {
-      console.log('Creating facility with data:', facilityData);
       const newFacility = await facilityService.create(facilityData);
-      setFacilities(prev => [...prev, newFacility]);
+      // Replace the temporary facility with the real one from server
+      setFacilities(facilities.map(f => f.id === tempFacility.id ? newFacility : f));
     } catch (error) {
       console.error('Error creating facility:', error);
+      // Revert the optimistic update on error
+      setFacilities(facilities.filter(f => f.id !== tempFacility.id));
       throw error;
     }
   };
@@ -104,19 +129,44 @@ const Facilities: React.FC = () => {
 
   const handleUpdateFacility = async (facilityId: string, facilityData: { name: string }) => {
     try {
-      const updatedFacility = await facilityService.update(facilityId, facilityData);
-      setFacilities(prev => prev.map(f => f.id === facilityId ? updatedFacility : f));
+      await facilityService.update(facilityId, facilityData);
+      // Refresh facilities from context
+      await loadFacilities();
     } catch (error) {
+      console.error('Error updating facility:', error);
       throw error;
     }
   };
 
   const handleStatusChange = async (facilityId: string, newStatus: 'active' | 'inactive' | 'archived') => {
+    const operationKey = `status-${facilityId}`;
+    setOperationState(operationKey, true);
+    clearOperationError(operationKey);
+    
+    // Optimistic update - immediately update the UI
+    const originalFacilities = [...facilities];
+    const updatedFacilities = facilities.map(facility => 
+      facility.id === facilityId 
+        ? { ...facility, status: newStatus }
+        : facility
+    );
+    
+    // Update the facilities context immediately for instant UI feedback
+    setFacilities(updatedFacilities);
+    
     try {
+      console.log('Updating facility status:', facilityId, 'to:', newStatus);
       const updatedFacility = await facilityService.updateStatus(facilityId, newStatus);
-      setFacilities(prev => prev.map(f => f.id === facilityId ? updatedFacility : f));
+      console.log('Status update successful:', updatedFacility);
+      setOperationState(operationKey, false);
+      return updatedFacility;
     } catch (error) {
       console.error('Failed to update facility status:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update status';
+      setOperationState(operationKey, false, errorMessage);
+      // Revert the optimistic update on error
+      setFacilities(originalFacilities);
+      throw error;
     }
   };
 
@@ -126,15 +176,44 @@ const Facilities: React.FC = () => {
   };
 
   const handleSaveName = async (facilityId: string) => {
-    if (!editingName.trim()) return;
+    if (!editingName.trim()) {
+      handleCancelEditName();
+      return;
+    }
+    
+    const operationKey = `name-${facilityId}`;
+    setOperationState(operationKey, true);
+    clearOperationError(operationKey);
+    
+    // Optimistic update - immediately update the UI
+    const originalFacilities = [...facilities];
+    const updatedFacilities = facilities.map(facility => 
+      facility.id === facilityId 
+        ? { ...facility, name: editingName.trim() }
+        : facility
+    );
+    
+    // Update the facilities context immediately for instant UI feedback
+    setFacilities(updatedFacilities);
+    
+    // Exit editing mode immediately for better UX
+    setEditingFacilityId(null);
+    setEditingName('');
     
     try {
       const updatedFacility = await facilityService.update(facilityId, { name: editingName.trim() });
-      setFacilities(prev => prev.map(f => f.id === facilityId ? updatedFacility : f));
-      setEditingFacilityId(null);
-      setEditingName('');
+      setOperationState(operationKey, false);
+      return updatedFacility;
     } catch (error) {
       console.error('Failed to update facility name:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update name';
+      setOperationState(operationKey, false, errorMessage);
+      // Revert the optimistic update on error
+      setFacilities(originalFacilities);
+      // Re-enter editing mode on error so user can retry
+      setEditingFacilityId(facilityId);
+      setEditingName(editingName.trim());
+      throw error;
     }
   };
 
@@ -144,11 +223,31 @@ const Facilities: React.FC = () => {
   };
 
   const handleDeleteFacilityConfirm = async (facilityId: string) => {
+    // Optimistic update - remove the facility immediately
+    const originalFacilities = [...facilities];
+    const updatedFacilities = facilities.filter(facility => facility.id !== facilityId);
+    
+    // Update the facilities context immediately for instant UI feedback
+    setFacilities(updatedFacilities);
+    
+    // Close the modal immediately for better UX
+    setIsDeleteModalOpen(false);
+    setSelectedFacility(null);
+    
     try {
+      console.log('Deleting facility:', facilityId);
       await facilityService.delete(facilityId);
-      setFacilities(prev => prev.filter(f => f.id !== facilityId));
+      console.log('Facility deleted successfully');
     } catch (error) {
-      throw error;
+      console.error('Error deleting facility:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete facility';
+      // Revert the optimistic update on error
+      setFacilities(originalFacilities);
+      // Re-open the modal on error
+      setIsDeleteModalOpen(true);
+      setSelectedFacility(originalFacilities.find(f => f.id === facilityId) || null);
+      throw new Error(errorMessage);
     }
   };
 
@@ -369,46 +468,81 @@ const Facilities: React.FC = () => {
                                 handleCancelEditName();
                               }
                             }}
-                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand"
+                            disabled={operationLoading[`name-${facility.id}`]}
+                            className={`px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand ${
+                              operationLoading[`name-${facility.id}`] ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                             autoFocus
                           />
                           <button
                             onClick={() => handleSaveName(facility.id)}
-                            className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
+                            disabled={operationLoading[`name-${facility.id}`]}
+                            className={`p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 ${
+                              operationLoading[`name-${facility.id}`] ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                             title="Save"
                           >
-                            ✓
+                            {operationLoading[`name-${facility.id}`] ? (
+                              <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              '✓'
+                            )}
                           </button>
                           <button
                             onClick={handleCancelEditName}
-                            className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                            disabled={operationLoading[`name-${facility.id}`]}
+                            className={`p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 ${
+                              operationLoading[`name-${facility.id}`] ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                             title="Cancel"
                           >
                             ✕
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => handleStartEditName(facility)}
-                          className="text-left hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded transition-colors"
-                        >
-                          {facility.name}
-                        </button>
+                        <div>
+                          <button
+                            onClick={() => handleStartEditName(facility)}
+                            className="text-left hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded transition-colors"
+                          >
+                            {facility.name}
+                          </button>
+                          {operationError[`name-${facility.id}`] && (
+                            <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              {operationError[`name-${facility.id}`]}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-3 text-xs text-gray-600 dark:text-gray-400">{facility.memberCount || 0}</td>
                     <td className="py-3 text-xs text-gray-600 dark:text-gray-400">{facility.projectCount || 0}</td>
                     <td className="py-3 text-xs text-gray-600 dark:text-gray-400">{facility.taskCount || 0}</td>
                     <td className="py-3">
-                      <select
-                        value={facility.status || 'active'}
-                        onChange={(e) => handleStatusChange(facility.id, e.target.value as 'active' | 'inactive' | 'archived')}
-                        className={`px-2 py-1 rounded-full text-xs font-medium border-0 focus:outline-none focus:ring-1 focus:ring-brand ${statusColors[facility.status || 'active']}`}
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="archived">Archived</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={facility.status || 'active'}
+                          onChange={(e) => handleStatusChange(facility.id, e.target.value as 'active' | 'inactive' | 'archived')}
+                          disabled={operationLoading[`status-${facility.id}`]}
+                          className={`px-2 py-1 rounded-full text-xs font-medium border-0 focus:outline-none focus:ring-1 focus:ring-brand ${statusColors[facility.status || 'active']} ${
+                            operationLoading[`status-${facility.id}`] ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                          <option value="archived">Archived</option>
+                        </select>
+                        {operationLoading[`status-${facility.id}`] && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        )}
+                      </div>
+                      {operationError[`status-${facility.id}`] && (
+                        <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          {operationError[`status-${facility.id}`]}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3">
                       <div className="flex items-center space-x-2">
@@ -418,6 +552,13 @@ const Facilities: React.FC = () => {
                           title="View Details"
                         >
                           <LucideEye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleViewDashboard(facility.id)}
+                          className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 transition-colors"
+                          title="View Dashboard"
+                        >
+                          <LucideBarChart3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteFacility(facility)}

@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Card, Button } from '../../../components/ui';
 import { Task } from '../types';
 import { taskService } from '../../../api/taskService';
+import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 
 interface TaskCardProps {
   task: Task;
@@ -29,6 +30,7 @@ interface TaskCardProps {
   handleOpenTaskDetail: (taskId: string) => void;
   isDeleting?: boolean;
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
+  facilityId?: string;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
@@ -39,7 +41,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
   handleOpenTaskDetail,
   isDeleting = false,
   onTaskMove,
+  facilityId,
 }) => {
+  const { memberRefreshTriggers } = useFacilityRefresh();
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -125,7 +129,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     };
 
     fetchAllAssigneeProfiles();
-  }, [currentTask]);
+  }, [currentTask, facilityId ? memberRefreshTriggers[facilityId] : 0]);
 
 
   // Improved click handler with better event detection

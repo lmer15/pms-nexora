@@ -1,5 +1,6 @@
 import axios from 'axios';
 import api from './api';
+import cacheService from '../services/cacheService';
 
 export interface Task {
   id: string;
@@ -137,22 +138,63 @@ export interface TaskDetails {
 const taskService = {
   create: async (taskData: CreateTaskData): Promise<Task> => {
     const response = await api.post('/tasks', taskData);
-    return response.data;
+    const task = response.data;
+    
+    // Invalidate cache for this project
+    cacheService.invalidateTask(task.projectId);
+    
+    return task;
   },
 
-  getByProject: async (projectId: string): Promise<Task[]> => {
-    const response = await api.get(`/tasks/project/${projectId}`);
-    return response.data;
+  getByProject: async (projectId: string, options?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    priority?: string;
+    assignee?: string;
+  }): Promise<Task[] | { tasks: Task[]; pagination: { page: number; limit: number; total: number; pages: number } }> => {
+    // Check cache first
+    const cached = cacheService.getProjectTasks(projectId, options) as (Task[] | { tasks: Task[]; pagination: { page: number; limit: number; total: number; pages: number } }) | null;
+    if (cached) {
+      return cached;
+    }
+
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.status) params.append('status', options.status);
+    if (options?.priority) params.append('priority', options.priority);
+    if (options?.assignee) params.append('assignee', options.assignee);
+    
+    const response = await api.get(`/tasks/project/${projectId}?${params.toString()}`);
+    
+    // Handle both response formats (backward compatibility)
+    let result;
+    if (response.data.tasks && response.data.pagination) {
+      result = response.data; // New paginated format
+    } else {
+      result = response.data; // Old array format
+    }
+
+    // Cache the result
+    cacheService.setProjectTasks(projectId, result, options);
+    
+    return result;
   },
 
   getById: async (id: string): Promise<Task> => {
     const response = await api.get(`/tasks/${id}`);
-    return response.data;
+    return response.data as Task;
   },
 
   update: async (id: string, taskData: Partial<CreateTaskData>): Promise<Task> => {
     const response = await api.put(`/tasks/${id}`, taskData);
-    return response.data;
+    const task = response.data;
+    
+    // Invalidate cache for this project
+    cacheService.invalidateTask(task.projectId);
+    
+    return task;
   },
 
   pin: async (id: string, pinned: boolean): Promise<Task> => {
@@ -161,7 +203,16 @@ const taskService = {
   },
 
   delete: async (id: string): Promise<void> => {
+    // Get task first to know which project to invalidate
+    const task = await taskService.getById(id);
+    
     await api.delete(`/tasks/${id}`);
+    
+    // Invalidate cache for this project
+    if (task?.projectId) {
+      cacheService.invalidateTask(task.projectId);
+      cacheService.invalidateProject(task.projectId);
+    }
   },
 
   // Task Details methods

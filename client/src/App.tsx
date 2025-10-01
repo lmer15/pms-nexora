@@ -1,5 +1,9 @@
+import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { CurrentFacilityProvider } from "./context/CurrentFacilityContext";
+import { FacilityProvider } from "./context/FacilityContext";
+import { FacilityRefreshProvider } from "./context/FacilityRefreshContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
 import AcceptInvitation from "./pages/AcceptInvitation";
@@ -16,6 +20,18 @@ import Meetings from "./pages/Meetings";
 import DashboardLayout from "./components/DashboardLayout";
 import PrivateRoute from "./routes/PrivateRoute";
 import LoadingAnimation from "./components/LoadingAnimation";
+
+export default function App() {
+  return (
+    <CurrentFacilityProvider>
+      <FacilityProvider>
+        <FacilityRefreshProvider>
+          <AppContent />
+        </FacilityRefreshProvider>
+      </FacilityProvider>
+    </CurrentFacilityProvider>
+  );
+}
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -125,8 +141,4 @@ function AppContent() {
       />
     </Routes>
   );
-}
-
-export default function App() {
-  return <AppContent />;
 }

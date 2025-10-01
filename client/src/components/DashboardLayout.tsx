@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { LucideBell, LucideUser, LucideSun, LucideMoon } from 'lucide-react';
+import { LucideBell, LucideUser, LucideSun, LucideMoon, LucideChevronRight, LucideBuilding } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCurrentFacility } from '../context/CurrentFacilityContext';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,8 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { currentFacilityName } = useCurrentFacility();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -22,7 +25,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   // Map routes to display names
   const getPageTitle = (pathname: string) => {
     const routeTitles: Record<string, string> = {
-      '/dashboard': 'Facility Dashboard',
+      '/dashboard': 'Dashboard',
       '/Facilities': 'Facilities Management',
       '/time-log': 'Time Log',
       '/resource-mgmt': 'Resource Management',
@@ -31,7 +34,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       '/notes': 'Notes',
       '/meetings': 'Meetings'
     };
-    return routeTitles[pathname] || 'Facility Dashboard';
+    
+    // Handle dynamic facility route
+    if (pathname.startsWith('/facility/')) {
+      return 'Facility View';
+    }
+    
+    return routeTitles[pathname] || 'Dashboard';
   };
 
   const toggleSidebar = () => {
@@ -56,11 +65,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   }, []);
 
   return (
-    <div className={`h-screen ${isDarkMode ? 'bg-neutral-dark' : 'bg-neutral-light'}`}>
+    <div className={`h-screen overflow-hidden ${isDarkMode ? 'bg-neutral-dark' : 'bg-neutral-light'}`}>
       {/* Header */}
-      <header className={`fixed top-0 ${isSidebarCollapsed ? 'left-16' : 'left-64'} right-0 z-30 shadow-sm border-b px-6 py-3 flex items-center justify-between h-14 ${
+      <header className={`fixed top-0 ${isSidebarCollapsed ? 'left-16' : 'left-64'} right-0 z-30 shadow-sm border-b h-14 flex items-center justify-between px-6 ${
         isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`}>
+      }`} style={{ margin: 0 }}>
         {/* Collapse Arrow */}
         <button
           onClick={toggleSidebar}
@@ -88,10 +97,30 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           </svg>
         </button>
 
-        <div className="flex items-center space-x-4 pl-10">
-          <h1 className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            {getPageTitle(location.pathname)}
-          </h1>
+        <div className="flex items-center space-x-5">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center">
+              <button
+                onClick={() => navigate('/Facilities')}
+                className={`text-sm font-medium hover:underline transition-colors ml-3 ${
+                  isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-600'
+                }`}
+              >
+                {getPageTitle(location.pathname)}
+              </button>
+              {currentFacilityName && location.pathname.startsWith('/facility/') && (
+                <LucideChevronRight className="w-4 h-4 text-green-500 ml-3" />
+              )}
+            </div>
+            {currentFacilityName && location.pathname.startsWith('/facility/') && (
+              <div className="flex items-center space-x-2">
+                <LucideBuilding className="w-4 h-4 text-gray-500" />
+                <span className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {currentFacilityName}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -143,7 +172,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} isDarkMode={isDarkMode} />
 
       {/* Main Content */}
-      <main className={`p-4 ${isSidebarCollapsed ? 'ml-16' : 'ml-64'} mt-14 h-[calc(100vh-3.5rem)]`}>
+      <main className={`${isSidebarCollapsed ? 'ml-16' : 'ml-64'} mt-14 h-[calc(100vh-3.5rem)] ${
+        location.pathname.startsWith('/facility/') 
+          ? 'overflow-hidden' 
+          : 'overflow-y-auto p-4'
+      }`}>
         {children}
       </main>
     </div>

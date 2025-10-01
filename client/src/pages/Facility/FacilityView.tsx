@@ -2,21 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { facilityService, Facility, FacilityStats } from '../../api/facilityService';
 import { useAuth } from '../../context/AuthContext';
+import { useCurrentFacility } from '../../context/CurrentFacilityContext';
+import { useFacilityRefresh } from '../../context/FacilityRefreshContext';
 import Notification from '../../components/Notification';
 import DeleteConfirmationModal from '../../components/DeleteProjectModal';
 import ArchiveConfirmationModal from '../../components/ArchiveProjectModal';
-import TaskDetailModal from '../../components/TaskDetailModal';
-import FacilityHeader from './components/FacilityHeader';
+import TaskDetailDrawer from '../../components/TaskDetailDrawer';
+import SlimFacilityHeader from './components/SlimFacilityHeader';
+import CommandPalette from '../../components/CommandPalette';
 import KanbanBoard from './components/KanbanBoard';
-import { useProjectManagement } from '../../hooks/useProjectManagement';
+import ListView from './components/ListView';
+import CalendarView from './components/CalendarView';
+import TimelineView from './components/TimelineView';
+import { useOptimizedProjectManagement } from '../../hooks/useOptimizedProjectManagement';
 import { useTaskManagement } from '../../hooks/useTaskManagement';
 import { taskService } from '../../api/taskService';
+import cacheService from '../../services/cacheService';
 import { Column, Task } from './types';
+import './components/Views.css';
 
 const FacilityView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setCurrentFacilityName } = useCurrentFacility();
+  const { memberRefreshTriggers } = useFacilityRefresh();
   const [facility, setFacility] = useState<Facility | null>(null);
   const [facilityStats, setFacilityStats] = useState<FacilityStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,17 +43,21 @@ const FacilityView: React.FC = () => {
   const [showProjectArchiveNotification, setShowProjectArchiveNotification] = useState(false);
   const [showProjectCreateNotification, setShowProjectCreateNotification] = useState(false);
   const [openTaskDropdownId, setOpenTaskDropdownId] = useState<string | null>(null);
-  const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
+  const [isTaskDetailDrawerOpen, setIsTaskDetailDrawerOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
+  const [assigneeFilter, setAssigneeFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'calendar' | 'timeline'>('kanban');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const handleOpenTaskDetail = (taskId: string) => {
-    console.log('handleOpenTaskDetail called with taskId:', taskId);
     setSelectedTaskId(taskId);
-    setIsTaskDetailModalOpen(true);
-    console.log('Modal state after opening:', { isTaskDetailModalOpen: true, selectedTaskId: taskId });
+    setIsTaskDetailDrawerOpen(true);
   };
 
   // Wrapper function to show confirmation modal before deleting task
@@ -54,6 +68,8 @@ const FacilityView: React.FC = () => {
 
 
   const handleTaskMove = async (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => {
+    console.log('handleTaskMove called:', { taskId, fromColumnId, toColumnId, newIndex });
+    
     // Update the local state immediately for better UX (optimistic update)
     setColumns(prevColumns => {
       const newColumns = [...prevColumns];
@@ -62,13 +78,23 @@ const FacilityView: React.FC = () => {
       const sourceColumnIndex = newColumns.findIndex(col => col.id === fromColumnId);
       const targetColumnIndex = newColumns.findIndex(col => col.id === toColumnId);
       
-      if (sourceColumnIndex === -1 || targetColumnIndex === -1) return prevColumns;
+      console.log('Column indices:', { sourceColumnIndex, targetColumnIndex });
+      
+      if (sourceColumnIndex === -1 || targetColumnIndex === -1) {
+        console.log('Column not found, returning previous columns');
+        return prevColumns;
+      }
       
       // Find the task in the source column
       const sourceColumn = newColumns[sourceColumnIndex];
       const taskIndex = sourceColumn.tasks.findIndex(task => task.id === taskId);
       
-      if (taskIndex === -1) return prevColumns;
+      console.log('Task index in source column:', taskIndex);
+      
+      if (taskIndex === -1) {
+        console.log('Task not found in source column');
+        return prevColumns;
+      }
       
       // Remove task from source column
       const [movedTask] = sourceColumn.tasks.splice(taskIndex, 1);
@@ -80,16 +106,27 @@ const FacilityView: React.FC = () => {
       const targetColumn = newColumns[targetColumnIndex];
       targetColumn.tasks.splice(newIndex, 0, updatedTask);
       
+      console.log('Task moved locally, updating backend...');
       return newColumns;
     });
 
     // Update the task's projectId in the backend
     try {
-      await taskService.update(taskId, { projectId: toColumnId });
+      console.log('Calling taskService.update with:', { taskId, projectId: toColumnId });
+      const updatedTask = await taskService.update(taskId, { projectId: toColumnId });
+      console.log('Backend update successful:', updatedTask);
+      
+      // Manually invalidate cache for both source and target projects
+      // This ensures fresh data is loaded when returning to the facility view
+      cacheService.invalidateProject(fromColumnId);
+      cacheService.invalidateProject(toColumnId);
+      console.log('Cache invalidated for both projects:', { fromColumnId, toColumnId });
+      
       // Show success notification
       setShowTaskMoveNotification(true);
     } catch (error) {
       console.error('Failed to move task:', error);
+      console.error('Error details:', error.response?.data || error.message);
       // Revert the local state change on error
       setColumns(prevColumns => {
         // Reload columns from server to get the correct state
@@ -103,12 +140,8 @@ const FacilityView: React.FC = () => {
     if (!itemToDelete) return;
     if (itemToDelete.type === 'project') {
       setColumns(prev => prev.filter(col => col.id !== itemToDelete.id));
-      const success = await deleteProjectHook(itemToDelete.id, itemToDelete.name);
-      if (success) {
-        setShowProjectDeleteNotification(true);
-      } else {
-        await loadProjects();
-      }
+      await deleteProjectHook(itemToDelete.id);
+      setShowProjectDeleteNotification(true);
     } else {
       await handleDeleteTask(itemToDelete.id, itemToDelete.name, itemToDelete.columnId || '');
       setShowTaskDeleteNotification(true);
@@ -121,13 +154,8 @@ const FacilityView: React.FC = () => {
     if (!itemToArchive) return;
     // Immediately remove the project column from UI
     setColumns(prev => prev.filter(col => col.id !== itemToArchive.id));
-    const success = await archiveProjectHook(itemToArchive.id, itemToArchive.name);
-    if (success) {
-      setShowProjectArchiveNotification(true);
-    } else {
-      // If archiving failed, reload to restore the column
-      await loadProjects();
-    }
+    await archiveProjectHook(itemToArchive.id);
+    setShowProjectArchiveNotification(true);
     setIsArchiveModalOpen(false);
     setItemToArchive(null);
   };
@@ -154,11 +182,32 @@ const FacilityView: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
+  // Command palette keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+      if (event.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     if (id) {
       loadFacility();
     }
-  }, [id]);
+    
+    // Cleanup: clear facility name when component unmounts
+    return () => {
+      setCurrentFacilityName(null);
+    };
+  }, [id, setCurrentFacilityName]);
 
   const loadFacility = async () => {
     if (!id) return;
@@ -171,6 +220,7 @@ const FacilityView: React.FC = () => {
       ]);
       setFacility(facilityData);
       setFacilityStats(statsData);
+      setCurrentFacilityName(facilityData.name);
     } catch (err) {
       setError('Failed to load facility details');
       console.error('Error loading facility:', err);
@@ -186,6 +236,9 @@ const FacilityView: React.FC = () => {
     setColumns,
     loadProjects,
     loadColumnsForProject,
+    loadFacilityData,
+    refreshTasks,
+    isLoading: projectLoading,
     isCreatingProject,
     newProjectName,
     setNewProjectName,
@@ -201,7 +254,7 @@ const FacilityView: React.FC = () => {
     handleUpdateProjectName,
     handleArchiveProject: archiveProjectHook,
     handleDeleteProject: deleteProjectHook,
-  } = useProjectManagement(id || '', () => setShowProjectCreateNotification(true), () => setShowProjectDeleteNotification(true), () => setShowProjectArchiveNotification(true));
+  } = useOptimizedProjectManagement(id || '', () => setShowProjectCreateNotification(true), () => setShowProjectDeleteNotification(true), () => setShowProjectArchiveNotification(true));
 
   const {
     editingTaskId,
@@ -215,26 +268,87 @@ const FacilityView: React.FC = () => {
     handleCancelNewTask,
     handleSaveTask,
     handleCancelEdit,
-    handleDeleteTask,
+    handleDeleteTask: originalHandleDeleteTask,
   } = useTaskManagement(columns, setColumns, () => setShowNotification(true));
 
-  // Load projects on mount and when id changes
+  // Enhanced task deletion with fallback refresh
+  const handleDeleteTask = async (taskId: string, taskTitle: string, columnId: string) => {
+    const success = await originalHandleDeleteTask(taskId, taskTitle, columnId);
+    
+    if (success) {
+      // Add a small delay and then refresh to ensure UI is updated
+      setTimeout(async () => {
+        await refreshTasks();
+      }, 1000);
+    } else {
+      // If deletion failed, refresh the tasks to get the current state
+      await refreshTasks();
+    }
+    
+    return success;
+  };
+
+  // Load facility data on mount and when id changes using optimized method
   useEffect(() => {
     if (id) {
-      loadProjects();
+      loadFacilityData();
     }
   }, [id]);
 
-  // Update columns when projects change
-  useEffect(() => {
-    if (projects.length > 0) {
-      loadColumnsForProject(projects);
+  // Collect available assignees from facility members
+  const [availableAssignees, setAvailableAssignees] = useState<Array<{id: string, name: string}>>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+
+  // Handle task updates
+  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
+    try {
+      await taskService.update(taskId, updates);
+      // Refresh tasks to get updated data
+      await refreshTasks();
+    } catch (error) {
+      console.error('Failed to update task:', error);
     }
-  }, [projects]);
+  };
+
+  // Fetch facility members for assignee filter
+  useEffect(() => {
+    const fetchFacilityMembers = async () => {
+      if (!facility?.id) return;
+      
+      try {
+        const membersData = await facilityService.getFacilityMembers(facility.id);
+        const assignees = membersData.map(member => ({
+          id: member.id,
+          name: member.name
+        }));
+        setAvailableAssignees(assignees);
+      } catch (error) {
+        console.error('Failed to fetch facility members for assignee filter:', error);
+        setAvailableAssignees([]);
+      }
+    };
+
+    fetchFacilityMembers();
+  }, [facility?.id, memberRefreshTriggers[facility?.id || '']]);
+
+  // Collect available tags from all tasks
+  useEffect(() => {
+    const tags = new Set<string>();
+    columns.forEach(column => {
+      column.tasks.forEach(task => {
+        if (task.tags) {
+          task.tags.forEach(tag => tags.add(tag));
+        }
+      });
+    });
+    setAvailableTags(Array.from(tags));
+  }, [columns]);
 
   // Filter columns based on search term and filter criteria
   const filteredColumns = React.useMemo(() => {
-    if (!searchTerm && filter === 'all') {
+    const hasFilters = searchTerm || filter !== 'all' || assigneeFilter !== 'all' || tagFilter !== 'all' || priorityFilter !== 'all';
+    
+    if (!hasFilters) {
       return columns;
     }
 
@@ -248,11 +362,9 @@ const FacilityView: React.FC = () => {
       if (filter !== 'all') {
         switch (filter) {
           case 'active':
-            // For now, we'll consider all projects as 'active' since we don't have status in the current data structure
             statusMatches = true;
             break;
           case 'completed':
-            // For now, we'll consider no projects as 'completed' since we don't have status in the current data structure
             statusMatches = false;
             break;
           case 'with-tasks':
@@ -275,19 +387,47 @@ const FacilityView: React.FC = () => {
 
       return (projectMatches || taskMatches) && statusMatches;
     }).map(column => {
-      // If searching, filter tasks within each column
+      // Filter tasks within each column based on all criteria
+      let filteredTasks = column.tasks;
+
+      // Search term filter
       if (searchTerm) {
-        return {
-          ...column,
-          tasks: column.tasks.filter(task =>
-            task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
-          )
-        };
+        filteredTasks = filteredTasks.filter(task =>
+          task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
       }
-      return column;
+
+      // Assignee filter
+      if (assigneeFilter !== 'all') {
+        filteredTasks = filteredTasks.filter(task => {
+          // Match by assignee name or assignee ID
+          return task.assigneeName === assigneeFilter || 
+                 task.assignee === assigneeFilter ||
+                 (task.assignee && availableAssignees.some(a => a.id === task.assignee && a.name === assigneeFilter));
+        });
+      }
+
+      // Tag filter
+      if (tagFilter !== 'all') {
+        filteredTasks = filteredTasks.filter(task =>
+          task.tags && task.tags.includes(tagFilter)
+        );
+      }
+
+      // Priority filter
+      if (priorityFilter !== 'all') {
+        filteredTasks = filteredTasks.filter(task =>
+          task.priority === priorityFilter
+        );
+      }
+
+      return {
+        ...column,
+        tasks: filteredTasks
+      };
     });
-  }, [columns, searchTerm, filter]);
+  }, [columns, searchTerm, filter, assigneeFilter, tagFilter, priorityFilter, availableAssignees]);
 
   // Listen for task updates from TaskDetailModal
   useEffect(() => {
@@ -348,8 +488,8 @@ const FacilityView: React.FC = () => {
   }
 
   return (
-    <div className="bg-neutral-light dark:bg-gray-900 flex flex-col overflow-hidden h-full">
-      <FacilityHeader
+    <div className="bg-neutral-light dark:bg-gray-900 flex flex-col h-full">
+      <SlimFacilityHeader
         facility={facility}
         projectsCount={projects.length}
         memberCount={facilityStats?.memberCount || 0}
@@ -359,45 +499,138 @@ const FacilityView: React.FC = () => {
         filter={filter}
         setFilter={setFilter}
         isDarkMode={isDarkMode}
+        totalTasks={facilityStats?.taskCount || 0}
+        completedTasks={facilityStats?.completedTaskCount || 0}
+        overdueTasks={facilityStats?.overdueTaskCount || 0}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        assigneeFilter={assigneeFilter}
+        setAssigneeFilter={setAssigneeFilter}
+        tagFilter={tagFilter}
+        setTagFilter={setTagFilter}
+        priorityFilter={priorityFilter}
+        setPriorityFilter={setPriorityFilter}
+        availableAssignees={availableAssignees}
+        projects={columns.map(col => ({
+          id: col.id,
+          title: col.title,
+          taskCount: col.tasks.length
+        }))}
+        selectedProjectId={selectedProjectId}
+        onProjectSelect={(projectId) => {
+          // Set the selected project
+          setSelectedProjectId(projectId);
+          
+          // Scroll to the project column
+          const element = document.querySelector(`[data-column-id="${projectId}"]`);
+          if (element) {
+            // Find the horizontal scrolling container (KanbanBoard)
+            const scrollContainer = document.querySelector('.kanban-board');
+            if (scrollContainer) {
+              // Calculate the position of the element relative to the scroll container
+              const containerRect = scrollContainer.getBoundingClientRect();
+              const elementRect = element.getBoundingClientRect();
+              const scrollLeft = scrollContainer.scrollLeft + (elementRect.left - containerRect.left) - (containerRect.width / 2) + (elementRect.width / 2);
+              
+              // Smooth scroll to the element
+              scrollContainer.scrollTo({
+                left: scrollLeft,
+                behavior: 'smooth'
+              });
+            } else {
+              // Fallback to regular scrollIntoView
+              element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
+        }}
+        onApplyFilters={(filters) => {
+          setSearchTerm(filters.searchTerm);
+          setFilter(filters.filter);
+          setAssigneeFilter(filters.assigneeFilter);
+          setTagFilter(filters.tagFilter);
+          setPriorityFilter(filters.priorityFilter);
+        }}
       />
 
-      <KanbanBoard
-        columns={filteredColumns}
-        isDarkMode={isDarkMode}
-        editingTaskId={editingTaskId}
-        editingTaskTitle={editingTaskTitle}
-        setEditingTaskTitle={setEditingTaskTitle}
-        setEditingTaskId={(id) => {}}
-        addingTaskColumnId={addingTaskColumnId}
-        setAddingTaskColumnId={(id) => {}}
-        openTaskDropdownId={openTaskDropdownId}
-        setOpenTaskDropdownId={setOpenTaskDropdownId}
-        openDropdownId={openDropdownId}
-        setOpenDropdownId={setOpenDropdownId}
-        editingProjectId={editingProjectId}
-        editingProjectName={editingProjectName}
-        setEditingProjectId={setEditingProjectId}
-        setEditingProjectName={setEditingProjectName}
-        isCreatingProject={isCreatingProject}
-        newProjectName={newProjectName}
-        setNewProjectName={setNewProjectName}
-        isCreatingLoading={isCreatingLoading}
-        createError={createError}
-        handleStartCreateProject={handleStartCreateProject}
-        handleCancelCreateProject={handleCancelCreateProject}
-        handleCreateProject={handleCreateProject}
-        handleCreateTask={handleCreateTask}
-        handleSaveNewTask={handleSaveNewTask}
-        handleCancelNewTask={handleCancelNewTask}
-        handleDeleteTask={handleTaskDeleteClick}
-        handleSaveTask={handleSaveTask}
-        handleCancelEdit={handleCancelEdit}
-        handleArchiveProject={handleArchiveProject}
-        handleDeleteProject={handleDeleteProject}
-        handleUpdateProjectName={handleUpdateProjectName}
-        handleOpenTaskDetail={handleOpenTaskDetail}
-        onTaskMove={handleTaskMove}
-      />
+
+      {/* View Content */}
+      <div className="flex-1">
+        {currentView === 'kanban' && (
+          <div className="h-full">
+            <KanbanBoard
+            columns={filteredColumns}
+            isDarkMode={isDarkMode}
+            editingTaskId={editingTaskId}
+            editingTaskTitle={editingTaskTitle}
+            setEditingTaskTitle={setEditingTaskTitle}
+            setEditingTaskId={(id) => {}}
+            addingTaskColumnId={addingTaskColumnId}
+            setAddingTaskColumnId={(id) => {}}
+            openTaskDropdownId={openTaskDropdownId}
+            setOpenTaskDropdownId={setOpenTaskDropdownId}
+            openDropdownId={openDropdownId}
+            setOpenDropdownId={setOpenDropdownId}
+            editingProjectId={editingProjectId}
+            editingProjectName={editingProjectName}
+            setEditingProjectId={setEditingProjectId}
+            setEditingProjectName={setEditingProjectName}
+            isCreatingProject={isCreatingProject}
+            newProjectName={newProjectName}
+            setNewProjectName={setNewProjectName}
+            isCreatingLoading={isCreatingLoading}
+            createError={createError}
+            handleStartCreateProject={handleStartCreateProject}
+            handleCancelCreateProject={handleCancelCreateProject}
+            handleCreateProject={handleCreateProject}
+            handleCreateTask={handleCreateTask}
+            handleSaveNewTask={handleSaveNewTask}
+            handleCancelNewTask={handleCancelNewTask}
+            handleDeleteTask={handleTaskDeleteClick}
+            handleSaveTask={handleSaveTask}
+            handleCancelEdit={handleCancelEdit}
+            handleArchiveProject={handleArchiveProject}
+            handleDeleteProject={handleDeleteProject}
+            handleUpdateProjectName={handleUpdateProjectName}
+            handleOpenTaskDetail={handleOpenTaskDetail}
+            onTaskMove={handleTaskMove}
+            facilityId={id}
+          />
+          </div>
+        )}
+        
+        {currentView === 'list' && (
+          <div className="overflow-auto">
+            <ListView
+            columns={filteredColumns}
+            isDarkMode={isDarkMode}
+            onTaskClick={handleOpenTaskDetail}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDeleteClick}
+            onTaskMove={handleTaskMove}
+          />
+          </div>
+        )}
+        
+        {currentView === 'calendar' && (
+          <CalendarView
+            columns={filteredColumns}
+            isDarkMode={isDarkMode}
+            onTaskClick={handleOpenTaskDetail}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDeleteClick}
+          />
+        )}
+        
+        {currentView === 'timeline' && (
+          <TimelineView
+            columns={filteredColumns}
+            isDarkMode={isDarkMode}
+            onTaskClick={handleOpenTaskDetail}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDeleteClick}
+          />
+        )}
+      </div>
 
       {showNotification && (
         <Notification
@@ -454,16 +687,43 @@ const FacilityView: React.FC = () => {
           isDarkMode={isDarkMode}
         />
       )}
-      {isTaskDetailModalOpen && selectedTaskId && (
-        <TaskDetailModal
+      {isTaskDetailDrawerOpen && selectedTaskId && (
+        <TaskDetailDrawer
           taskId={selectedTaskId}
-          isOpen={isTaskDetailModalOpen}
+          isOpen={isTaskDetailDrawerOpen}
           onClose={() => {
-            setIsTaskDetailModalOpen(false);
+            setIsTaskDetailDrawerOpen(false);
             setSelectedTaskId(null);
           }}
         />
       )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        isDarkMode={isDarkMode}
+        tasks={columns.flatMap(col => col.tasks.map(task => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+          assigneeName: task.assigneeName,
+          projectTitle: col.title
+        })))}
+        projects={columns.map(col => ({
+          id: col.id,
+          title: col.title,
+          taskCount: col.tasks.length
+        }))}
+        assignees={availableAssignees}
+        tags={availableTags}
+        onTaskClick={handleOpenTaskDetail}
+        onViewChange={setCurrentView}
+        onAssigneeFilter={setAssigneeFilter}
+        onTagFilter={setTagFilter}
+        onPriorityFilter={setPriorityFilter}
+      />
     </div>
   );
 };

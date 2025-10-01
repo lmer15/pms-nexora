@@ -90,8 +90,8 @@ class FacilityInvitation extends FirestoreService {
       throw new Error('Invitation is no longer valid');
     }
 
-    if (new Date() > invitation.expiresAt) {
-      await this.update(invitation.id, { status: 'expired', updatedAt: new Date() });
+    if (new Date() > new Date(invitation.expiresAt)) {
+      await this.update(invitation.id, { status: 'expired', updatedAt: new Date().toISOString() });
       throw new Error('Invitation has expired');
     }
 
@@ -99,8 +99,8 @@ class FacilityInvitation extends FirestoreService {
     await this.update(invitation.id, {
       status: 'accepted',
       acceptedBy: acceptingUserId,
-      acceptedAt: new Date(),
-      updatedAt: new Date()
+      acceptedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return invitation;
@@ -119,8 +119,8 @@ class FacilityInvitation extends FirestoreService {
 
     await this.update(invitationId, {
       status: 'rejected',
-      rejectedAt: new Date(),
-      updatedAt: new Date()
+      rejectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return invitation;
@@ -143,8 +143,8 @@ class FacilityInvitation extends FirestoreService {
 
     await this.update(invitationId, {
       status: 'cancelled',
-      cancelledAt: new Date(),
-      updatedAt: new Date()
+      cancelledAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return invitation;

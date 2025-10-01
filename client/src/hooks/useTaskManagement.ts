@@ -104,14 +104,24 @@ export const useTaskManagement = (
   const handleDeleteTask = async (taskId: string, taskTitle: string, columnId: string) => {
     try {
       await taskService.delete(taskId);
-      setColumns(prev => prev.map(col =>
-        col.id === columnId
-          ? { ...col, tasks: col.tasks.filter(t => t.id !== taskId) }
-          : col
-      ));
+      
+      // Update the columns state to remove the deleted task
+      setColumns(prev => {
+        const updatedColumns = prev.map(col =>
+          col.id === columnId
+            ? { ...col, tasks: col.tasks.filter(t => t.id !== taskId) }
+            : col
+        );
+        return updatedColumns;
+      });
       return true;
     } catch (error) {
       console.error('Error deleting task:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
       return false;
     }
   };

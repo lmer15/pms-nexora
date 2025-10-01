@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LucidePlus,
   LucideMoreHorizontal,
   LucideArchive,
   LucideTrash2,
+  LucideEye,
+  LucideEyeOff,
 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { Column, Task } from '../types';
@@ -37,6 +39,7 @@ interface ProjectColumnProps {
   handleUpdateProjectName: (projectId: string, name: string) => void;
   handleOpenTaskDetail: (taskId: string) => void;
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
+  facilityId?: string;
 }
 
 const ProjectColumn: React.FC<ProjectColumnProps> = ({
@@ -67,7 +70,11 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
   handleUpdateProjectName,
   handleOpenTaskDetail,
   onTaskMove,
+  facilityId,
 }) => {
+  // State for scrollbar visibility
+  const [showScrollbar, setShowScrollbar] = useState(false);
+
   // Drop zone functionality
   const { isOver, setNodeRef } = useDroppable({
     id: `column-${column.id}`,
@@ -76,12 +83,40 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
       columnId: column.id,
     },
   });
+
+  // Simple color generation based on column title
+  const getColumnColor = (title: string, isDark: boolean) => {
+    const colors = [
+      'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700',
+      'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700',
+      'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700',
+      'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-700',
+      'bg-pink-50 border-pink-200 dark:bg-pink-900/20 dark:border-pink-700',
+    ];
+    const hash = title.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const getColumnTextColor = (title: string, isDark: boolean) => {
+    const colors = [
+      'text-blue-800 dark:text-blue-300',
+      'text-green-800 dark:text-green-300',
+      'text-purple-800 dark:text-purple-300',
+      'text-orange-800 dark:text-orange-300',
+      'text-pink-800 dark:text-pink-300',
+    ];
+    const hash = title.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const columnColorClasses = getColumnColor(column.title, isDarkMode);
+  const textColorClasses = getColumnTextColor(column.title, isDarkMode);
+
   return (
     <div
       ref={setNodeRef}
-      className={`group flex-shrink-0 flex flex-col min-h-0 max-h-full rounded-lg project-column drag-transition ${
-        isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-      } p-3 ${
+      data-column-id={column.id}
+      className={`group flex-shrink-0 flex flex-col max-h-[calc(100vh-160px)] rounded-lg project-column drag-transition ${columnColorClasses} p-3 ${
         isOver ? 'drop-zone-active' : ''
       }`}
       style={{ width: '16.25rem', minWidth: '16.25rem', maxWidth: '16.25rem' }}
@@ -125,7 +160,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
             />
           ) : (
             <h3
-              className="font-semibold text-gray-700 dark:text-gray-300 text-sm cursor-pointer flex items-center min-w-0"
+              className={`font-semibold ${textColorClasses} text-sm cursor-pointer flex items-center min-w-0`}
               onClick={() => {
                 setEditingProjectId(column.id);
                 setEditingProjectName(column.title);
@@ -136,13 +171,24 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
             </h3>
           )}
         </div>
-        <div className="relative">
+        <div className="flex items-center space-x-1">
+          {/* Scrollbar Toggle Button */}
           <button
-            onClick={() => setOpenDropdownId(openDropdownId === column.id ? null : column.id)}
-            className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            onClick={() => setShowScrollbar(!showScrollbar)}
+            className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={showScrollbar ? "Hide scrollbar" : "Show scrollbar"}
           >
-            <LucideMoreHorizontal className="w-4 h-4" />
+            {showScrollbar ? <LucideEyeOff className="w-4 h-4" /> : <LucideEye className="w-4 h-4" />}
           </button>
+          
+          {/* More Options Button */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenDropdownId(openDropdownId === column.id ? null : column.id)}
+              className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <LucideMoreHorizontal className="w-4 h-4" />
+            </button>
           {openDropdownId === column.id && (
             <div className={`absolute right-0 mt-1 w-32 rounded-md shadow-lg z-10 ${isDarkMode ? 'bg-gray-700' : 'bg-white'} border ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
               <button
@@ -161,6 +207,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -178,7 +225,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
       </button>
 
       {/* Tasks - Scrollable */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
+      <div className={`overflow-y-auto project-column-scroll ${showScrollbar ? 'show-scrollbar' : ''}`}>
         <div className="space-y-2">
           {addingTaskColumnId === column.id ? (
             <input
@@ -232,6 +279,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
                 handleDeleteTask={handleDeleteTask}
                 handleOpenTaskDetail={handleOpenTaskDetail}
                 onTaskMove={onTaskMove}
+                facilityId={facilityId}
               />
             ))
           )}

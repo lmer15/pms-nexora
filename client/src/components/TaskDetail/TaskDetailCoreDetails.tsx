@@ -18,6 +18,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Task } from '../../api/taskService';
 import { facilityService, FacilityMember } from '../../api/facilityService';
+import { useFacilityRefresh } from '../../context/FacilityRefreshContext';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 
@@ -54,6 +55,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   onSwitchToDependencies,
   onSwitchToSubtasks
 }) => {
+  const { memberRefreshTriggers } = useFacilityRefresh();
   const [editingField, setEditingField] = React.useState<string | null>(null);
   const [facilityMembers, setFacilityMembers] = React.useState<FacilityMember[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -71,7 +73,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     if (facilityId) {
       loadFacilityMembers();
     }
-  }, [facilityId]);
+  }, [facilityId, memberRefreshTriggers[facilityId || '']]);
 
   // Handle click outside to close priority dropdown
   React.useEffect(() => {
@@ -355,17 +357,6 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   // Use calculated progress from subtasks if subtasks exist, otherwise use manual task progress
   const displayProgress = safeSubtasks.length > 0 ? calculatedProgress : (task.progress !== undefined ? task.progress : 0);
   
-  // Debug logging (remove in production)
-  if (safeSubtasks.length > 0) {
-    console.log('Progress Debug:', {
-      totalSubtasks: safeSubtasks.length,
-      completedSubtasks: completedSubtasks.length,
-      calculatedProgress,
-      displayProgress,
-      taskProgress: task.progress,
-      subtasksData: safeSubtasks.map(st => ({ id: st.id, title: st.title, completed: st.completed }))
-    });
-  }
 
   // Combine and sort recent activities
   const recentActivities = [

@@ -14,6 +14,7 @@ const {
 const {
   getFacilities,
   getFacilityById,
+  getFacilityWithData,
   createFacility,
   updateFacility,
   deleteFacility,
@@ -22,6 +23,7 @@ const {
   sendInvitation,
   getFacilityMembers,
   getFacilityStats,
+  getFacilityTags,
   updateMemberRole,
   removeMember,
   generateShareLink,
@@ -29,27 +31,38 @@ const {
   updateShareLinkRole,
   deactivateShareLink,
   joinViaShareLink,
+  requestToJoinViaShareLink,
   getJoinRequests,
   approveJoinRequest,
   rejectJoinRequest,
-  leaveFacility
+  leaveFacility,
+  getInvitationDetails,
+  acceptInvitation,
+  rejectInvitation
 } = require('../controllers/facilityController');
 
-// Basic facility routes
-router.get('/', authMiddleware, getFacilities);
-router.get('/:id', authMiddleware, getFacilityById);
-router.post('/', authMiddleware, createFacility);
-router.put('/:id', authMiddleware, updateFacility);
-router.delete('/:id', authMiddleware, deleteFacility);
-
 // ============ FACILITY SHARING ROUTES ============
+
+// Invitation routes (must come before /:id routes to avoid conflicts)
+router.get('/invitations/:token', getInvitationDetails);
+router.post('/invitations/:token/accept', authMiddleware, acceptInvitation);
+router.post('/invitations/:token/reject', authMiddleware, rejectInvitation);
 
 // User search route (for invitations)
 router.get('/search/users', authMiddleware, searchUsers);
 
+// Basic facility routes
+router.get('/', authMiddleware, getFacilities);
+router.get('/:id', authMiddleware, getFacilityById);
+router.get('/:id/data', authMiddleware, getFacilityWithData); // Optimized endpoint
+router.post('/', authMiddleware, createFacility);
+router.put('/:id', authMiddleware, updateFacility);
+router.delete('/:id', authMiddleware, deleteFacility);
+
 // Member management routes
 router.get('/:facilityId/members', authMiddleware, canViewFacility, getFacilityMembers);
 router.get('/:facilityId/stats', authMiddleware, canViewFacility, getFacilityStats);
+router.get('/:facilityId/tags', authMiddleware, canViewFacility, getFacilityTags);
 router.put('/:facilityId/members/role', authMiddleware, canManageMembers, validateRole, canUpdateMemberRole, updateMemberRole);
 router.delete('/:facilityId/members', authMiddleware, canManageMembers, removeMember);
 router.post('/:facilityId/leave', authMiddleware, canViewFacility, leaveFacility);
@@ -68,7 +81,10 @@ router.post('/join/:linkId', authMiddleware, joinViaShareLink);
 
 // Join request routes
 router.get('/:facilityId/join-requests', authMiddleware, canManageJoinRequests, getJoinRequests);
-router.post('/join-requests/:requestId/approve', authMiddleware, canManageJoinRequests, validateRole, approveJoinRequest);
-router.post('/join-requests/:requestId/reject', authMiddleware, canManageJoinRequests, rejectJoinRequest);
+router.post('/:facilityId/join-requests/:requestId/approve', authMiddleware, canManageJoinRequests, validateRole, approveJoinRequest);
+router.post('/:facilityId/join-requests/:requestId/reject', authMiddleware, canManageJoinRequests, rejectJoinRequest);
+
+// Request to join via share link (creates join request)
+router.post('/request-join/:linkId', authMiddleware, requestToJoinViaShareLink);
 
 module.exports = router;

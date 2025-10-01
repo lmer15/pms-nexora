@@ -52,6 +52,42 @@ class User extends FirestoreService {
     const { firebaseUid, ...profile } = user;
     return profile;
   }
+
+  // Batch fetch user profiles by IDs
+  async getProfilesByIds(userIds) {
+    if (!userIds || userIds.length === 0) return {};
+    
+    const profiles = {};
+    
+    // Firestore 'in' queries are limited to 10 items
+    const chunks = [];
+    for (let i = 0; i < userIds.length; i += 10) {
+      chunks.push(userIds.slice(i, i + 10));
+    }
+    
+    const promises = chunks.map(chunk => 
+      this.collection.where('firebaseUid', 'in', chunk).get()
+    );
+    
+    const snapshots = await Promise.all(promises);
+    
+    snapshots.forEach(snapshot => {
+      snapshot.docs.forEach(doc => {
+        const user = doc.data();
+        const userId = user.firebaseUid || doc.id;
+        profiles[userId] = {
+          id: userId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: user.displayName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+          profilePicture: user.profilePicture
+        };
+      });
+    });
+    
+    return profiles;
+  }
 }
 
 module.exports = new User();

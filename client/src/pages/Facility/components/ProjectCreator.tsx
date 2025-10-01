@@ -24,26 +24,47 @@ const ProjectCreator: React.FC<ProjectCreatorProps> = ({
   handleCreateProject,
   isDarkMode,
 }) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isCreatingLoading && newProjectName.trim()) {
+        handleCreateProject();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCancelCreateProject();
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    // Only cancel if we're not clicking on a related element and not currently creating
+    if (!e.currentTarget.contains(e.relatedTarget as Node) && !isCreatingLoading) {
+      // Add a small delay to prevent race conditions
+      setTimeout(() => {
+        if (!isCreatingLoading) {
+          handleCancelCreateProject();
+        }
+      }, 100);
+    }
+  };
+
   return (
     <div className="flex-shrink-0 flex items-start justify-start" style={{ width: '16.25rem', minWidth: '16.25rem', maxWidth: '16.25rem' }}>
       {!isCreatingProject ? (
         <button
           onClick={handleStartCreateProject}
-          className="w-full p-2 rounded-md text-sm flex items-center space-x-2 transition-colors bg-brand text-white hover:bg-brand-dark"
+          className="w-8 h-8 p-1 rounded-md text-sm flex items-center justify-center transition-colors bg-brand text-white hover:bg-brand-dark"
         >
-          <LucidePlus className="w-5 h-5" />
-          <span>Add Project</span>
+          <LucidePlus className="w-4 h-4" />
         </button>
       ) : (
         <div
           className={`flex items-center p-2 w-full rounded-md transition-all duration-300 ease-in-out shadow-md ${isDarkMode ? 'bg-gray-700' : 'bg-white'}`}
           style={{ maxWidth: '18rem' }}
           tabIndex={-1}
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget)) {
-              handleCancelCreateProject();
-            }
-          }}
+          onBlur={handleBlur}
         >
           <input
             type="text"
@@ -52,15 +73,8 @@ const ProjectCreator: React.FC<ProjectCreatorProps> = ({
             onChange={(e) => setNewProjectName(e.target.value)}
             className={`flex-grow font-semibold text-sm border-none focus:outline-none ${isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900 placeholder-gray-500'}`}
             autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleCreateProject();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleCancelCreateProject();
-              }
-            }}
+            onKeyDown={handleKeyDown}
+            disabled={isCreatingLoading}
           />
           {isCreatingLoading && (
             <div className="ml-2 animate-spin rounded-full h-4 w-4 border-b-2 border-brand"></div>

@@ -4,6 +4,8 @@ export interface Task {
   description?: string;
   status: 'todo' | 'in-progress' | 'review' | 'done';
   assignee?: string;
+  assigneeName?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   dueDate?: string;
   creatorId: string;
   createdAt: string;

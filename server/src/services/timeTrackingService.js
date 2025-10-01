@@ -232,7 +232,6 @@ class TimeTrackingService {
     
     for (const [sessionKey, session] of this.activeSessions.entries()) {
       if (session.startTime < cutoffTime) {
-        console.log(`Cleaning up inactive session: ${sessionKey}`);
         this.activeSessions.delete(sessionKey);
       }
     }

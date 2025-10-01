@@ -4,6 +4,8 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card } from '../../../components/ui/card';
 import { facilityShareService, FacilityMember, ShareLink, JoinRequest, SearchUser } from '../../../api/facilityShareService';
+import { useFacility } from '../../../context/FacilityContext';
+import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 
 interface ShareFacilityModalProps {
   isOpen: boolean;
@@ -29,6 +31,8 @@ interface SelectedUser {
 }
 
 const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose, facilityId, isDarkMode }) => {
+  const { refreshFacilities } = useFacility();
+  const { triggerMemberRefresh } = useFacilityRefresh();
   const [selectedTab, setSelectedTab] = useState<'members' | 'joinRequests'>('members');
   const [emailOrName, setEmailOrName] = useState('');
   const [selectedRole, setSelectedRole] = useState('member');
@@ -324,6 +328,13 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
     try {
       await facilityShareService.removeMember(facilityId, memberId);
       setSuccess('Member removed successfully!');
+      
+      // Immediately refresh facility list so the removed member no longer sees the facility
+      await refreshFacilities();
+      
+      // Trigger comprehensive refresh of all components that display user information
+      triggerMemberRefresh(facilityId);
+      
       loadMembers();
     } catch (err: any) {
       setError(err.message);
@@ -384,6 +395,10 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
     try {
       await facilityShareService.approveJoinRequest(facilityId, requestId, assignedRole);
       setSuccess('Join request approved successfully!');
+      
+      // Immediately refresh facility list so the new member sees the facility
+      await refreshFacilities();
+      
       loadJoinRequests();
       loadMembers();
     } catch (err: any) {

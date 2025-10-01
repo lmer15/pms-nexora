@@ -24,34 +24,67 @@ class UserFacility extends FirestoreService {
     ]);
   }
 
-  // Add user to facility with role
+  // Add user to facility with role (atomic operation)
   async addUserToFacility(userId, facilityId, role = 'member') {
-    const existing = await this.findByUserAndFacility(userId, facilityId);
-    if (existing.length > 0) {
-      throw new Error('User is already a member of this facility');
-    }
-
-    const data = {
-      userId,
-      facilityId,
-      role,
-      joinedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    // Create the user-facility relationship
-    const relationship = await this.create(data);
-
-    // Also add the user to the facility's members array
+    // Use transaction to prevent race conditions
+    const db = require('../config/firebase-admin').db;
+    
     try {
-      await Facility.addMember(facilityId, userId);
-    } catch (facilityError) {
-      console.error('Error updating facility members array:', facilityError);
-      // Don't fail the operation if facility update fails
+      const result = await db.runTransaction(async (transaction) => {
+        // Check if relationship already exists
+        const existingQuery = this.collection
+          .where('userId', '==', userId)
+          .where('facilityId', '==', facilityId);
+        
+        const existingSnapshot = await transaction.get(existingQuery);
+        
+        if (!existingSnapshot.empty) {
+          throw new Error('User is already a member of this facility');
+        }
+        
+        // Get facility document BEFORE any writes (Firestore transaction rule)
+        const facilityRef = db.collection('facilities').doc(facilityId);
+        const facilityDoc = await transaction.get(facilityRef);
+        
+        if (!facilityDoc.exists) {
+          throw new Error('Facility not found');
+        }
+        
+        // Create the user-facility relationship
+        const relationshipRef = this.collection.doc();
+        const relationshipData = {
+          userId,
+          facilityId,
+          role,
+          joinedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        transaction.set(relationshipRef, relationshipData);
+        
+        // Update the facility's members array
+        const facilityData = facilityDoc.data();
+        const members = facilityData.members || [];
+        
+        if (!members.includes(userId)) {
+          members.push(userId);
+          transaction.update(facilityRef, { 
+            members,
+            updatedAt: new Date().toISOString()
+          });
+        }
+        
+        return { id: relationshipRef.id, ...relationshipData };
+      });
+      
+      return result;
+    } catch (error) {
+      if (error.message.includes('already a member')) {
+        throw error;
+      }
+      throw new Error('Failed to add user to facility: ' + error.message);
     }
-
-    return relationship;
   }
 
   // Update user role in facility
@@ -61,7 +94,17 @@ class UserFacility extends FirestoreService {
       throw new Error('Invalid role');
     }
 
-    return this.update(relationshipId, { role });
+    const result = await this.update(relationshipId, { role });
+    
+    // Invalidate cache for the user and facility
+    const cacheService = require('../services/cacheService');
+    if (result && result.userId && result.facilityId) {
+      cacheService.invalidateUserFacilities(result.userId);
+      cacheService.invalidateFacilityStats(result.facilityId);
+      cacheService.invalidateFacilityMembers(result.facilityId);
+    }
+    
+    return result;
   }
 
   // Remove user from facility
@@ -81,6 +124,12 @@ class UserFacility extends FirestoreService {
       console.error('Error updating facility members array:', facilityError);
       // Don't fail the operation if facility update fails
     }
+
+    // Invalidate cache for the user and facility
+    const cacheService = require('../services/cacheService');
+    cacheService.invalidateUserFacilities(userId);
+    cacheService.invalidateFacilityStats(facilityId);
+    cacheService.invalidateFacilityMembers(facilityId);
 
     return true;
   }

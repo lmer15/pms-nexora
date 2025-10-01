@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
@@ -15,7 +15,15 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Initialize Firestore with persistent local cache to reduce reads
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    // Cache size: 100MB (default is 40MB)
+    cacheSizeBytes: 100 * 1024 * 1024
+  })
+});
+
 export const realtimeDb = getDatabase(app);
 
 auth.settings = {

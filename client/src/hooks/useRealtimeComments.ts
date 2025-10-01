@@ -31,7 +31,7 @@ export const useRealtimeComments = (taskId: string) => {
     } catch (err) {
       console.error('Failed to fetch user profiles:', err);
       if (retryCount < 2) {
-        console.log(`Retrying profile fetch (attempt ${retryCount + 1})`);
+        // Retrying profile fetch
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
         return fetchMissingProfiles(comments, retryCount + 1, setFallbackOnFailure);
       }

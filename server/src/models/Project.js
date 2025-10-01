@@ -5,29 +5,57 @@ class Project extends FirestoreService {
     super('projects');
   }
 
-  // Find projects by facility
+  // Find projects by facility with caching
   async findByFacility(facilityId) {
-    // Exclude archived projects by default
-    return this.query([
-      { field: 'facilityId', operator: '==', value: facilityId },
-      { field: 'archived', operator: '==', value: false }
-    ]);
+    try {
+      const cacheService = require('../services/cacheService');
+      
+      // Check cache first
+      const cachedProjects = cacheService.getFacilityProjects(facilityId);
+      if (cachedProjects) {
+        return cachedProjects;
+      }
+
+      // Exclude archived projects by default
+      const projects = await this.query([
+        { field: 'facilityId', operator: '==', value: facilityId },
+        { field: 'archived', operator: '==', value: false }
+      ]);
+
+      // Cache the results
+      cacheService.setFacilityProjects(facilityId, projects);
+      
+      return projects;
+    } catch (error) {
+      console.error('Error finding projects by facility:', error);
+      return [];
+    }
   }
 
   // Find projects by assignee
   async findByAssignee(userId) {
-    return this.query([
-      { field: 'assignees', operator: 'array-contains', value: userId },
-      { field: 'archived', operator: '==', value: false }
-    ]);
+    try {
+      return await this.query([
+        { field: 'assignees', operator: 'array-contains', value: userId },
+        { field: 'archived', operator: '==', value: false }
+      ]);
+    } catch (error) {
+      console.error('Error finding projects by assignee:', error);
+      return [];
+    }
   }
 
   // Find projects by status
   async findByStatus(status) {
-    return this.query([
-      { field: 'status', operator: '==', value: status },
-      { field: 'archived', operator: '==', value: false }
-    ]);
+    try {
+      return await this.query([
+        { field: 'status', operator: '==', value: status },
+        { field: 'archived', operator: '==', value: false }
+      ]);
+    } catch (error) {
+      console.error('Error finding projects by status:', error);
+      return [];
+    }
   }
 
   // Add assignee to project

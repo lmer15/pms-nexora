@@ -19,8 +19,8 @@ class FacilityJoinRequest extends FirestoreService {
       message: message ? message.trim() : null,
       shareToken, // Token from share link if applicable
       status: 'pending', // pending, approved, rejected
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     return this.create(joinRequestData);
@@ -82,8 +82,8 @@ class FacilityJoinRequest extends FirestoreService {
       status: 'approved',
       approvedBy,
       assignedRole,
-      approvedAt: new Date(),
-      updatedAt: new Date()
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return request;
@@ -104,8 +104,8 @@ class FacilityJoinRequest extends FirestoreService {
       status: 'rejected',
       rejectedBy,
       rejectionReason: rejectionReason ? rejectionReason.trim() : null,
-      rejectedAt: new Date(),
-      updatedAt: new Date()
+      rejectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return request;
@@ -128,8 +128,8 @@ class FacilityJoinRequest extends FirestoreService {
 
     await this.update(requestId, {
       status: 'cancelled',
-      cancelledAt: new Date(),
-      updatedAt: new Date()
+      cancelledAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return request;

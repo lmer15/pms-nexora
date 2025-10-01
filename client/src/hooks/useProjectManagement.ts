@@ -28,7 +28,7 @@ export const useProjectManagement = (facilityId: string, onProjectCreate?: () =>
   };
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim() || !user) return;
+    if (!newProjectName.trim() || !user || isCreatingLoading) return;
 
     setIsCreatingLoading(true);
     setCreateError('');
@@ -42,7 +42,6 @@ export const useProjectManagement = (facilityId: string, onProjectCreate?: () =>
         status: 'planning',
         archived: false,
       });
-
       setIsCreatingProject(false);
       setNewProjectName('');
       // Reload projects and columns
@@ -107,7 +106,9 @@ export const useProjectManagement = (facilityId: string, onProjectCreate?: () =>
   const loadColumnsForProject = async (projects: any[]) => {
     const newColumns: Column[] = await Promise.all(projects.map(async (project) => {
       try {
-        const tasks = await taskService.getByProject(project.id);
+        const tasksResult = await taskService.getByProject(project.id);
+        // Handle both array and paginated response formats
+        const tasks = Array.isArray(tasksResult) ? tasksResult : tasksResult.tasks || [];
         return {
           id: project.id,
           title: project.name,
@@ -131,12 +132,17 @@ export const useProjectManagement = (facilityId: string, onProjectCreate?: () =>
     }
   }, [facilityId]);
 
+  const refreshTasks = async () => {
+    await loadColumnsForProject(projects);
+  };
+
   return {
     projects,
     columns,
     setColumns,
     loadProjects,
     loadColumnsForProject,
+    refreshTasks,
     isCreatingProject,
     newProjectName,
     setNewProjectName,

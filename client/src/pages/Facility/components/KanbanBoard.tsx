@@ -3,6 +3,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } 
 import { Column } from '../types';
 import ProjectColumn from './ProjectColumn';
 import ProjectCreator from './ProjectCreator';
+import KanbanMiniMap from '../../../components/KanbanMiniMap';
 import '../../../components/ui/DragDrop.css';
 
 interface KanbanBoardProps {
@@ -41,6 +42,7 @@ interface KanbanBoardProps {
   handleUpdateProjectName: (projectId: string, name: string) => void;
   handleOpenTaskDetail: (taskId: string) => void;
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
+  facilityId?: string;
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -79,6 +81,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   handleDeleteProject,
   handleUpdateProjectName,
   onTaskMove,
+  facilityId,
 }) => {
   const [activeTask, setActiveTask] = React.useState<any>(null);
 
@@ -93,30 +96,38 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const { active, over } = event;
     setActiveTask(null);
 
-    if (!over || !active.data.current || !over.data.current) return;
+    if (!over || !active.data.current) return;
+
+    // Only handle task drops
+    if (active.data.current.type !== 'task') return;
 
     const activeTask = active.data.current.task;
     const activeColumnId = active.data.current.columnId;
-    const overColumnId = over.data.current.columnId;
 
-    if (activeColumnId === overColumnId) {
-      // Same column - just reorder (for now, we'll implement this later)
-      return;
-    }
+    // Check if dropped on a column
+    if (over.data.current?.type === 'column') {
+      const overColumnId = over.data.current.columnId;
+      
+      if (activeColumnId === overColumnId) {
+        // Same column - just reorder (for now, we'll implement this later)
+        return;
+      }
 
-    // Different column - move task to new project
-    if (onTaskMove) {
-      onTaskMove(activeTask.id, activeColumnId, overColumnId, 0);
+      // Different column - move task to new project
+      if (onTaskMove) {
+        onTaskMove(activeTask.id, activeColumnId, overColumnId, 0);
+      }
     }
   };
+
   return (
     <DndContext
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="p-2 overflow-x-auto flex-1 kanban-board">
-        <div className="flex space-x-2 min-w-max pb-4 h-full min-h-0 items-start">
+      <div className="p-1 overflow-x-auto overflow-y-hidden flex-1 kanban-board h-full">
+        <div className="flex space-x-2 min-w-max h-full min-h-0 items-start">
           {columns.map((column) => (
             <ProjectColumn
               key={column.id}
@@ -147,6 +158,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           handleUpdateProjectName={handleUpdateProjectName}
           handleOpenTaskDetail={handleOpenTaskDetail}
           onTaskMove={onTaskMove}
+          facilityId={facilityId}
         />
           ))}
 
@@ -163,6 +175,18 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         />
         </div>
       </div>
+
+      {/* Mini Map */}
+      <KanbanMiniMap
+        columns={columns}
+        isDarkMode={isDarkMode}
+        onColumnClick={(columnId) => {
+          const element = document.querySelector(`[data-column-id="${columnId}"]`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }}
+      />
       
       <DragOverlay className="drag-overlay">
         {activeTask ? (

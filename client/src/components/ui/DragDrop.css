@@ -48,11 +48,185 @@
 .kanban-board {
   position: relative;
   z-index: 1;
+  /* Ensure scrollbars are visible */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.kanban-board::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.kanban-board::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 4px;
+}
+
+.kanban-board::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.kanban-board::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Dark mode scrollbar */
+.dark .kanban-board {
+  scrollbar-color: #4a5568 #2d3748;
+}
+
+.dark .kanban-board::-webkit-scrollbar-track {
+  background: #2d3748;
+}
+
+.dark .kanban-board::-webkit-scrollbar-thumb {
+  background: #4a5568;
+}
+
+.dark .kanban-board::-webkit-scrollbar-thumb:hover {
+  background: #718096;
 }
 
 .project-column {
   position: relative;
   z-index: 2;
+}
+
+/* Project column scroll styling - Hidden by default */
+.project-column-scroll {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+.project-column-scroll::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
+/* Show scrollbar on hover */
+.project-column:hover .project-column-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.project-column:hover .project-column-scroll::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.project-column:hover .project-column-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.project-column:hover .project-column-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.project-column:hover .project-column-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Dark mode project column scrollbar */
+.dark .project-column:hover .project-column-scroll {
+  scrollbar-color: #4a5568 #2d3748;
+}
+
+.dark .project-column:hover .project-column-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark .project-column:hover .project-column-scroll::-webkit-scrollbar-thumb {
+  background: #4a5568;
+}
+
+.dark .project-column:hover .project-column-scroll::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
+/* Toggle scrollbar visibility class */
+.project-column-scroll.show-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.project-column-scroll.show-scrollbar::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.project-column-scroll.show-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.project-column-scroll.show-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.project-column-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Dark mode toggle scrollbar */
+.dark .project-column-scroll.show-scrollbar {
+  scrollbar-color: #4a5568 #2d3748;
+}
+
+.dark .project-column-scroll.show-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark .project-column-scroll.show-scrollbar::-webkit-scrollbar-thumb {
+  background: #4a5568;
+}
+
+.dark .project-column-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
+/* KanbanMiniMap scrollbar styling */
+.kanban-minimap {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.kanban-minimap::-webkit-scrollbar {
+  height: 6px;
+}
+
+.kanban-minimap::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.kanban-minimap::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.kanban-minimap::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Dark mode minimap scrollbar */
+.dark .kanban-minimap {
+  scrollbar-color: #4a5568 #2d3748;
+}
+
+.dark .kanban-minimap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark .kanban-minimap::-webkit-scrollbar-thumb {
+  background: #4a5568;
+}
+
+.dark .kanban-minimap::-webkit-scrollbar-thumb:hover {
+  background: #718096;
 }
 
 .task-card {

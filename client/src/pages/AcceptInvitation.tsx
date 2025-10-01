@@ -4,6 +4,7 @@ import { CheckCircle, AlertCircle, Loader2, Building2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
+import { useFacility } from '../context/FacilityContext';
 import { facilityShareService } from '../api/facilityShareService';
 
 interface InvitationDetails {
@@ -22,6 +23,7 @@ const AcceptInvitation: React.FC = () => {
   const { token: invitationToken } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user, token: authToken } = useAuth();
+  const { refreshFacilities } = useFacility();
   
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +62,9 @@ const AcceptInvitation: React.FC = () => {
     try {
       setIsAccepting(true);
       const response = await facilityShareService.acceptInvitation(invitationToken!);
+      
+      // Immediately refresh the facility list so the user sees the new facility
+      await refreshFacilities();
       
       setSuccess('Invitation accepted successfully! Redirecting to facility...');
       

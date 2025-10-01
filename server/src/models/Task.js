@@ -5,24 +5,135 @@ class Task extends FirestoreService {
     super('tasks');
   }
 
-  // Find tasks by project
+  // Find tasks by project with caching
   async findByProject(projectId) {
-    return this.findByField('projectId', projectId);
+    try {
+      const cacheService = require('../services/cacheService');
+      
+      // Check cache first
+      const cachedTasks = cacheService.getProjectTasks(projectId);
+      if (cachedTasks) {
+        return cachedTasks;
+      }
+
+      const tasks = await this.findByField('projectId', projectId);
+      
+      // Cache the results
+      cacheService.setProjectTasks(projectId, tasks);
+      
+      return tasks;
+    } catch (error) {
+      console.error('Error finding tasks by project:', error);
+      return [];
+    }
+  }
+
+  // Batch load tasks for multiple projects (cost optimization)
+  async findByProjects(projectIds) {
+    try {
+      if (!projectIds || projectIds.length === 0) return [];
+      
+      const cacheService = require('../services/cacheService');
+      const results = {};
+      const uncachedProjectIds = [];
+      
+      // Check cache for each project
+      for (const projectId of projectIds) {
+        const cachedTasks = cacheService.getProjectTasks(projectId);
+        if (cachedTasks) {
+          results[projectId] = cachedTasks;
+        } else {
+          uncachedProjectIds.push(projectId);
+        }
+      }
+      
+      // Load uncached projects in batches
+      if (uncachedProjectIds.length > 0) {
+        const batchSize = 10; // Firestore 'in' queries are limited to 10 items
+        
+        for (let i = 0; i < uncachedProjectIds.length; i += batchSize) {
+          const batch = uncachedProjectIds.slice(i, i + batchSize);
+          
+          try {
+            const snapshot = await this.collection.where('projectId', 'in', batch).get();
+            
+            // Group tasks by projectId
+            const batchResults = {};
+            batch.forEach(projectId => {
+              batchResults[projectId] = [];
+            });
+            
+            snapshot.forEach(doc => {
+              const taskData = { id: doc.id, ...doc.data() };
+              const projectId = taskData.projectId;
+              if (batchResults[projectId]) {
+                batchResults[projectId].push(taskData);
+              }
+            });
+            
+            // Cache and add to results
+            Object.keys(batchResults).forEach(projectId => {
+              const tasks = batchResults[projectId];
+              cacheService.setProjectTasks(projectId, tasks);
+              results[projectId] = tasks;
+            });
+          } catch (batchError) {
+            console.error(`Error fetching tasks for batch ${batch.join(', ')}:`, batchError);
+            // Fallback to individual queries
+            for (const projectId of batch) {
+              try {
+                const tasks = await this.findByField('projectId', projectId);
+                cacheService.setProjectTasks(projectId, tasks);
+                results[projectId] = tasks;
+              } catch (individualError) {
+                console.error(`Error fetching tasks for project ${projectId}:`, individualError);
+                results[projectId] = [];
+              }
+            }
+          }
+        }
+      }
+      
+      return results;
+    } catch (error) {
+      console.error('Error finding tasks by projects:', error);
+      return {};
+    }
   }
 
   // Find tasks by assignee
   async findByAssignee(userId) {
-    return this.findByField('assigneeId', userId);
+    try {
+      return await this.findByField('assigneeId', userId);
+    } catch (error) {
+      console.error('Error finding tasks by assignee:', error);
+      return [];
+    }
   }
 
   // Find tasks by status
   async findByStatus(status) {
-    return this.findByField('status', status);
+    try {
+      return await this.findByField('status', status);
+    } catch (error) {
+      console.error('Error finding tasks by status:', error);
+      return [];
+    }
   }
 
   // Find tasks by priority
   async findByPriority(priority) {
-    return this.findByField('priority', priority);
+    try {
+      return await this.findByField('priority', priority);
+    } catch (error) {
+      console.error('Error finding tasks by priority:', error);
+      return [];
+    }
+  }
+
+  // Find tasks by user (alias for findByAssignee for backward compatibility)
+  async findByUser(userId) {
+    return this.findByAssignee(userId);
   }
 
   // Update task status
@@ -80,6 +191,63 @@ class Task extends FirestoreService {
     // In a real implementation, you might want to fetch project details
     // and filter by user permissions
     return tasks;
+  }
+
+  // Query tasks with filters and pagination
+  async query(filters = [], options = {}) {
+    const { limit = 50, offset = 0, orderBy = [] } = options;
+    
+    let query = this.collection;
+    
+    // Apply filters
+    filters.forEach(filter => {
+      query = query.where(filter.field, filter.operator, filter.value);
+    });
+    
+    // Apply ordering
+    orderBy.forEach(order => {
+      query = query.orderBy(order.field, order.direction || 'asc');
+    });
+    
+    // Apply pagination
+    if (offset > 0) {
+      query = query.offset(offset);
+    }
+    if (limit > 0) {
+      query = query.limit(limit);
+    }
+    
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  // Count tasks by multiple project IDs efficiently
+  async countByProjectIds(projectIds) {
+    if (!projectIds || projectIds.length === 0) return 0;
+    
+    try {
+      // Firestore 'in' queries are limited to 10 items
+      const chunks = [];
+      for (let i = 0; i < projectIds.length; i += 10) {
+        chunks.push(projectIds.slice(i, i + 10));
+      }
+      
+      const promises = chunks.map(chunk => 
+        this.collection.where('projectId', 'in', chunk).get()
+      );
+      
+      const snapshots = await Promise.all(promises);
+      
+      let totalCount = 0;
+      snapshots.forEach(snapshot => {
+        totalCount += snapshot.size;
+      });
+      
+      return totalCount;
+    } catch (error) {
+      console.error('Error counting tasks by project IDs:', error);
+      return 0;
+    }
   }
 }
 

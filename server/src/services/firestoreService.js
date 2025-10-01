@@ -68,7 +68,6 @@ class FirestoreService {
     } catch (error) {
       // Handle case where collection doesn't exist yet (empty database)
       if (error.code === 5 || error.message.includes('NOT_FOUND')) {
-        console.log(`Document with ID '${id}' not found in collection '${this.collection.id}'`);
         return null;
       }
       throw new Error(`Error finding document: ${error.message}`);
@@ -85,7 +84,6 @@ class FirestoreService {
       });
       return results;
     } catch (error) {
-      console.log(`Error querying collection '${this.collection.id}': ${error.message}, returning empty results`);
       return [];
     }
   }
@@ -112,7 +110,6 @@ class FirestoreService {
     } catch (error) {
       // Handle case where collection doesn't exist yet (empty database)
       if (error.code === 5 || error.message.includes('NOT_FOUND')) {
-        console.log(`Collection '${this.collection.id}' does not exist yet, returning empty results`);
         return [];
       }
       throw new Error(`Error getting all documents: ${error.message}`);
@@ -159,10 +156,27 @@ class FirestoreService {
     } catch (error) {
       // Handle case where collection doesn't exist yet (empty database)
       if (error.code === 5 || error.message.includes('NOT_FOUND')) {
-        console.log(`Collection '${this.collection.id}' does not exist yet, returning empty results`);
         return [];
       }
       throw new Error(`Error querying documents: ${error.message}`);
+    }
+  }
+
+  // Count documents with conditions
+  async count(conditions = []) {
+    try {
+      let query = this.collection;
+      conditions.forEach(condition => {
+        query = query.where(condition.field, condition.operator, condition.value);
+      });
+      const snapshot = await query.get();
+      return snapshot.size;
+    } catch (error) {
+      // Handle case where collection doesn't exist yet (empty database)
+      if (error.code === 5 || error.message.includes('NOT_FOUND')) {
+        return 0;
+      }
+      throw new Error(`Error counting documents: ${error.message}`);
     }
   }
 }

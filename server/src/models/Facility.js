@@ -10,25 +10,68 @@ class Facility extends FirestoreService {
     return this.findByField('ownerId', ownerId);
   }
 
-  // Find facilities by member (using UserFacility relationships)
+  // Find facilities by member (using UserFacility relationships) with caching
   async findByMember(userId) {
-    const UserFacility = require('./UserFacility');
-    const userFacilities = await UserFacility.findByUser(userId);
-    
-    if (userFacilities.length === 0) {
+    try {
+      const cacheService = require('../services/cacheService');
+      
+      // Check cache first
+      const cachedFacilities = cacheService.getUserFacilities(userId);
+      if (cachedFacilities) {
+        return cachedFacilities;
+      }
+
+      const UserFacility = require('./UserFacility');
+      const userFacilities = await UserFacility.findByUser(userId);
+      
+      if (userFacilities.length === 0) {
+        cacheService.setUserFacilities(userId, []);
+        return [];
+      }
+      
+      // Get all facility IDs for this user
+      const facilityIds = userFacilities.map(uf => uf.facilityId);
+      
+      // Use batch query for better performance - fetch all facilities at once
+      const facilities = [];
+      const batchSize = 10; // Firestore 'in' queries are limited to 10 items
+      
+      for (let i = 0; i < facilityIds.length; i += batchSize) {
+        const batch = facilityIds.slice(i, i + batchSize);
+        
+        try {
+          // Use Firestore 'in' query for batch fetching
+          const snapshot = await this.collection.where('__name__', 'in', batch.map(id => this.collection.doc(id))).get();
+          
+          snapshot.forEach(doc => {
+            if (doc.exists) {
+              const facilityData = { id: doc.id, ...doc.data() };
+              facilities.push(facilityData);
+            }
+          });
+        } catch (batchError) {
+          // Fallback to individual lookups for this batch
+          for (const facilityId of batch) {
+            try {
+              const facility = await this.findById(facilityId);
+              if (facility) {
+                facilities.push(facility);
+              }
+            } catch (individualError) {
+              console.error(`Error fetching individual facility ${facilityId}:`, individualError);
+            }
+          }
+        }
+      }
+      
+      // Cache the results
+      cacheService.setUserFacilities(userId, facilities);
+      
+      return facilities;
+    } catch (error) {
+      console.error('Error finding facilities by member:', error);
       return [];
     }
-    
-    // Get all facility IDs for this user
-    const facilityIds = userFacilities.map(uf => uf.facilityId);
-    
-    // Fetch all facilities where user is a member
-    const facilities = await Promise.all(
-      facilityIds.map(facilityId => this.findById(facilityId))
-    );
-    
-    // Filter out any null results and return valid facilities
-    return facilities.filter(facility => facility !== null);
   }
 
   // Add member to facility
@@ -65,6 +108,7 @@ class Facility extends FirestoreService {
       ...facilityData,
       ownerId,
       members: [ownerId], // Owner is automatically a member
+      status: facilityData.status || 'active', // Default to active status
       createdAt: new Date(),
       updatedAt: new Date()
     };

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from '../utils/storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -32,6 +32,14 @@ api.interceptors.response.use(
       // Token expired or invalid
       storage.clearAuthData();
       window.location.href = '/login';
+    } else if (error.response?.status === 403) {
+      // If it's a facility access error, redirect to facilities page
+      if (error.config?.url?.includes('/projects/facility/') || 
+          error.config?.url?.includes('/facilities/')) {
+        // Clear current facility from storage
+        storage.removeFacility();
+        window.location.href = '/Facilities';
+      }
     }
     return Promise.reject(error);
   }

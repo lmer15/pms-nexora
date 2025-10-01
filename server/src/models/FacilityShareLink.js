@@ -34,8 +34,8 @@ class FacilityShareLink extends FirestoreService {
       expiresAt,
       usageCount: 0,
       maxUsage: null, // null means unlimited
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     return this.create(shareLinkData);
@@ -51,7 +51,7 @@ class FacilityShareLink extends FirestoreService {
     // Filter out expired links
     const now = new Date();
     const activeLinks = links.filter(link => 
-      !link.expiresAt || link.expiresAt > now
+      !link.expiresAt || new Date(link.expiresAt) > now
     );
 
     return activeLinks.length > 0 ? activeLinks[0] : null;
@@ -87,22 +87,22 @@ class FacilityShareLink extends FirestoreService {
     }
 
     // Check expiration
-    if (shareLink.expiresAt && new Date() > shareLink.expiresAt) {
-      await this.update(shareLinkId, { isActive: false, updatedAt: new Date() });
+    if (shareLink.expiresAt && new Date() > new Date(shareLink.expiresAt)) {
+      await this.update(shareLinkId, { isActive: false, updatedAt: new Date().toISOString() });
       throw new Error('Share link has expired');
     }
 
     // Check usage limit
     if (shareLink.maxUsage && shareLink.usageCount >= shareLink.maxUsage) {
-      await this.update(shareLinkId, { isActive: false, updatedAt: new Date() });
+      await this.update(shareLinkId, { isActive: false, updatedAt: new Date().toISOString() });
       throw new Error('Share link usage limit exceeded');
     }
 
     // Increment usage count
     await this.update(shareLinkId, {
       usageCount: shareLink.usageCount + 1,
-      lastUsedAt: new Date(),
-      updatedAt: new Date()
+      lastUsedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return shareLink;
@@ -118,8 +118,8 @@ class FacilityShareLink extends FirestoreService {
     await this.update(shareLinkId, {
       isActive: false,
       deactivatedBy,
-      deactivatedAt: new Date(),
-      updatedAt: new Date()
+      deactivatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
     return shareLink;
@@ -144,7 +144,7 @@ class FacilityShareLink extends FirestoreService {
     await this.update(shareLinkId, {
       role: newRole,
       updatedBy,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     });
 
     return shareLink;

@@ -9,7 +9,6 @@ exports.firebaseRegister = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log('Decoded token:', decodedToken);
     const { email, uid } = decodedToken;
 
     if (!email) {
@@ -58,7 +57,6 @@ exports.firebaseGoogleAuth = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log('Decoded token:', decodedToken);
     const { email, name, uid, picture } = decodedToken;
 
     if (!email) {
@@ -86,7 +84,6 @@ exports.firebaseGoogleAuth = async (req, res) => {
       // Send welcome email on first login
       try {
           await sendWelcomeEmail(user);
-          console.log(`Welcome email sent successfully to ${user.email}`);
         } catch (emailError) {
           console.error('Failed to send welcome email:', emailError);
           // Don't fail the registration process due to email error
@@ -126,7 +123,6 @@ exports.firebaseVerify = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log('Decoded token:', decodedToken);
     const { email, uid } = decodedToken;
 
     if (!email) {
@@ -178,7 +174,6 @@ exports.firebaseSync = async (req, res) => {
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log('Decoded token:', decodedToken);
     const { email, uid, name, picture, email_verified } = decodedToken;
 
     if (!email) {

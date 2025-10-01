@@ -33,11 +33,43 @@ exports.getProjectById = async (req, res) => {
 
 exports.getProjectsByFacility = async (req, res) => {
   try {
-    const projects = await Project.findByFacility(req.params.facilityId);
-    res.json(projects);
+    const { facilityId } = req.params;
+    
+    // Check if user has access to this facility
+    const UserFacility = require('../models/UserFacility');
+    const userFacility = await UserFacility.findByUserAndFacility(req.userId, facilityId);
+    if (userFacility.length === 0) {
+      return res.status(403).json({ message: 'Access denied to this facility' });
+    }
+    
+    const projects = await Project.findByFacility(facilityId);
+    
+    // Convert timestamps to ISO strings for client
+    const projectsWithTimestamps = projects.map(project => {
+      const projectData = { ...project };
+      
+      if (project.createdAt && typeof project.createdAt.toDate === 'function') {
+        projectData.createdAt = project.createdAt.toDate().toISOString();
+      } else if (project.createdAt instanceof Date) {
+        projectData.createdAt = project.createdAt.toISOString();
+      }
+      
+      if (project.updatedAt && typeof project.updatedAt.toDate === 'function') {
+        projectData.updatedAt = project.updatedAt.toDate().toISOString();
+      } else if (project.updatedAt instanceof Date) {
+        projectData.updatedAt = project.updatedAt.toISOString();
+      }
+      
+      return projectData;
+    });
+    
+    res.json(projectsWithTimestamps);
   } catch (error) {
     console.error('Error fetching projects by facility:', error);
-    res.status(500).json({ message: 'Server error fetching projects' });
+    res.status(500).json({ 
+      message: 'Server error fetching projects',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -45,6 +77,19 @@ exports.createProject = async (req, res) => {
   try {
     const { facilityId, ...projectData } = req.body;
     const creatorId = req.userId; // Get authenticated user ID from middleware
+    
+    // Check if a project with the same name already exists in this facility
+    const existingProjects = await Project.findByFacility(facilityId);
+    const duplicateProject = existingProjects.find(p => 
+      p.name.toLowerCase().trim() === projectData.name.toLowerCase().trim()
+    );
+    
+    if (duplicateProject) {
+      return res.status(409).json({ 
+        message: 'A project with this name already exists in this facility' 
+      });
+    }
+    
     const project = await Project.createProject(projectData, facilityId, creatorId);
     res.status(201).json(project);
   } catch (error) {
@@ -55,7 +100,9 @@ exports.createProject = async (req, res) => {
 
 exports.updateProject = async (req, res) => {
   try {
+    console.log('Project update request:', { id: req.params.id, body: req.body });
     const updatedProject = await Project.update(req.params.id, req.body);
+    console.log('Project updated successfully:', updatedProject);
     if (!updatedProject) {
       return res.status(404).json({ message: 'Project not found' });
     }
@@ -76,22 +123,18 @@ exports.deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    console.log(`Starting cascading delete for project: ${projectId}`);
 
     // Get all tasks in this project
     const tasks = await Task.findByProject(projectId);
-    console.log(`Found ${tasks.length} tasks in project ${projectId}`);
 
     // Delete all tasks and their related data
     const taskDeletePromises = tasks.map(async (task) => {
-      console.log(`Deleting task ${task.id} and all related data`);
       
       // Delete all task-related data in parallel
       const taskRelatedDeletePromises = [
         // Delete task comments
         TaskComment.findByTask(task.id).then(comments => {
           if (comments && comments.length > 0) {
-            console.log(`Deleting ${comments.length} comments for task ${task.id}`);
             return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
           }
           return [];
@@ -100,7 +143,6 @@ exports.deleteProject = async (req, res) => {
         // Delete task attachments
         TaskAttachment.findByTask(task.id).then(attachments => {
           if (attachments && attachments.length > 0) {
-            console.log(`Deleting ${attachments.length} attachments for task ${task.id}`);
             return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
           }
           return [];
@@ -109,7 +151,6 @@ exports.deleteProject = async (req, res) => {
         // Delete task dependencies
         TaskDependency.findByTask(task.id).then(dependencies => {
           if (dependencies && dependencies.length > 0) {
-            console.log(`Deleting ${dependencies.length} dependencies for task ${task.id}`);
             return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
           }
           return [];
@@ -118,7 +159,6 @@ exports.deleteProject = async (req, res) => {
         // Delete task subtasks
         TaskSubtask.findByTask(task.id).then(subtasks => {
           if (subtasks && subtasks.length > 0) {
-            console.log(`Deleting ${subtasks.length} subtasks for task ${task.id}`);
             return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
           }
           return [];
@@ -127,7 +167,6 @@ exports.deleteProject = async (req, res) => {
         // Delete task time logs
         TaskTimeLog.findByTask(task.id).then(timeLogs => {
           if (timeLogs && timeLogs.length > 0) {
-            console.log(`Deleting ${timeLogs.length} time logs for task ${task.id}`);
             return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
           }
           return [];
@@ -136,7 +175,6 @@ exports.deleteProject = async (req, res) => {
         // Delete task activity logs
         TaskActivityLog.findByTask(task.id).then(activityLogs => {
           if (activityLogs && activityLogs.length > 0) {
-            console.log(`Deleting ${activityLogs.length} activity logs for task ${task.id}`);
             return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
           }
           return [];
@@ -152,7 +190,6 @@ exports.deleteProject = async (req, res) => {
 
     // Wait for all tasks to be deleted
     await Promise.all(taskDeletePromises);
-    console.log(`All tasks and related data deleted for project ${projectId}`);
 
     // Finally delete the project itself
     const deleted = await Project.delete(projectId);
@@ -160,7 +197,6 @@ exports.deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    console.log(`Project ${projectId} deleted successfully`);
     res.json({ message: 'Project and all related data deleted successfully' });
   } catch (error) {
     console.error('Error deleting project:', error);

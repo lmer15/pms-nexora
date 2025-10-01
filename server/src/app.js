@@ -12,6 +12,7 @@ const taskRoutes = require('./routes/taskRoutes');
 const noteRoutes = require('./routes/noteRoutes');
 const timeLogRoutes = require('./routes/timeLogRoutes');
 const { downloadAttachment } = require('./controllers/taskAttachmentController');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandlerMiddleware');
 
 const app = express();
 
@@ -47,15 +48,8 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/timeLogs', timeLogRoutes);
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Route not found' });
-});
+// Error handling middleware (must be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 module.exports = app;

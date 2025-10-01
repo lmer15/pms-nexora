@@ -14,36 +14,60 @@ const TaskTimeLog = require('../models/TaskTimeLog');
 const TaskActivityLog = require('../models/TaskActivityLog');
 const Note = require('../models/Note');
 const { sendFacilityInvitationEmail, sendFacilityInvitationToExistingUser } = require('../services/emailService');
+const cacheService = require('../services/cacheService');
 
 exports.getFacilities = async (req, res) => {
   try {
     const facilities = await Facility.findByMember(req.userId);
     
-    // Get statistics for each facility
+    // Get statistics for each facility efficiently with caching
     const facilitiesWithStats = await Promise.all(
       facilities.map(async (facility) => {
         try {
-          // Get member count
+          // Check cache first
+          const cachedStats = cacheService.getFacilityStats(facility.id);
+          if (cachedStats) {
+            return {
+              ...facility,
+              ...cachedStats
+            };
+          }
+
+          // Get member count with limit to reduce reads
           const relationships = await UserFacility.findByFacility(facility.id);
           const memberCount = relationships.length;
 
-          // Get project count
+          // Get project count with limit
           const projects = await Project.findByFacility(facility.id);
           const projectCount = projects.length;
 
-          // Get task count across all projects
+          // Get task count across all projects (limit to recent projects for performance)
           let totalTaskCount = 0;
-          for (const project of projects) {
-            const tasks = await Task.findByProject(project.id);
-            totalTaskCount += tasks.length;
+          if (projects.length > 0) {
+            // Only count tasks for the first 10 projects to reduce reads
+            const limitedProjectIds = projects.slice(0, 10).map(p => p.id);
+            totalTaskCount = await Task.countByProjectIds(limitedProjectIds);
+            
+            // If there are more than 10 projects, estimate the total
+            if (projects.length > 10) {
+              const avgTasksPerProject = totalTaskCount / limitedProjectIds.length;
+              totalTaskCount = Math.round(avgTasksPerProject * projects.length);
+            }
           }
 
-          return {
-            ...facility,
-            status: facility.status || 'active', // Default to active if no status
+          const stats = {
+            status: facility.status || 'active',
             memberCount,
             projectCount,
             taskCount: totalTaskCount
+          };
+
+          // Cache the stats
+          cacheService.setFacilityStats(facility.id, stats);
+
+          return {
+            ...facility,
+            ...stats
           };
         } catch (statsError) {
           console.error(`Error fetching stats for facility ${facility.id}:`, statsError);
@@ -77,13 +101,6 @@ exports.getFacilityById = async (req, res) => {
     const isOwner = facility.ownerId === req.userId;
     const isMember = userRelationship && userRelationship.length > 0;
     
-    console.log('Authorization check:', {
-      userId: req.userId,
-      facilityId: req.params.id,
-      isOwner,
-      isMember,
-      userRelationship: userRelationship ? userRelationship.length : 0
-    });
     
     if (!isOwner && !isMember) {
       return res.status(403).json({ message: 'Access denied to this facility' });
@@ -96,8 +113,98 @@ exports.getFacilityById = async (req, res) => {
   }
 };
 
+// Get facility with all data (optimized for cost reduction)
+exports.getFacilityWithData = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { includeTasks = 'true' } = req.query;
+    
+    // Get facility
+    const facility = await Facility.findById(id);
+    if (!facility) {
+      return res.status(404).json({ message: 'Facility not found' });
+    }
+    
+    // Check authorization
+    const userRelationship = await UserFacility.findByUserAndFacility(req.userId, id);
+    const isOwner = facility.ownerId === req.userId;
+    const isMember = userRelationship && userRelationship.length > 0;
+    
+    if (!isOwner && !isMember) {
+      return res.status(403).json({ message: 'Access denied to this facility' });
+    }
+    
+    // Get projects
+    const projects = await Project.findByFacility(id);
+    
+    let tasksData = {};
+    if (includeTasks === 'true' && projects.length > 0) {
+      // Batch load all tasks for all projects
+      const projectIds = projects.map(p => p.id);
+      const Task = require('../models/Task');
+      tasksData = await Task.findByProjects(projectIds);
+      
+      // Get all unique assignee IDs for batch lookup
+      const allTasks = Object.values(tasksData).flat();
+      const assigneeIds = [...new Set(allTasks.map(task => task.assigneeId).filter(Boolean))];
+      
+      // Batch fetch user profiles to populate assignee names
+      if (assigneeIds.length > 0) {
+        const User = require('../models/User');
+        const userProfiles = await User.getProfilesByIds(assigneeIds);
+        
+        // Add assignee names to all tasks
+        Object.keys(tasksData).forEach(projectId => {
+          tasksData[projectId] = tasksData[projectId].map(task => {
+            const taskData = { ...task };
+            
+            // Add assignee name if assigneeId exists
+            if (task.assigneeId) {
+              taskData.assignee = task.assigneeId;
+              taskData.assigneeName = userProfiles[task.assigneeId]?.displayName || 
+                                     userProfiles[task.assigneeId]?.email || 
+                                     'Unknown User';
+            }
+            
+            // Convert timestamps to ISO strings
+            if (task.createdAt && typeof task.createdAt.toDate === 'function') {
+              taskData.createdAt = task.createdAt.toDate().toISOString();
+            } else if (task.createdAt instanceof Date) {
+              taskData.createdAt = task.createdAt.toISOString();
+            }
+            
+            if (task.updatedAt && typeof task.updatedAt.toDate === 'function') {
+              taskData.updatedAt = task.updatedAt.toDate().toISOString();
+            } else if (task.updatedAt instanceof Date) {
+              taskData.updatedAt = task.updatedAt.toISOString();
+            }
+            
+            return taskData;
+          });
+        });
+      }
+    }
+    
+    // Format response
+    const response = {
+      facility,
+      projects: projects.map(project => ({
+        ...project,
+        tasks: tasksData[project.id] || []
+      }))
+    };
+    
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching facility with data:', error);
+    res.status(500).json({ message: 'Server error fetching facility data' });
+  }
+};
+
 exports.createFacility = async (req, res) => {
   try {
+    const cacheService = require('../services/cacheService');
+    
     // Use authenticated user as owner
     const ownerId = req.userId;
     const facilityData = { ...req.body };
@@ -113,6 +220,10 @@ exports.createFacility = async (req, res) => {
       // Don't fail the facility creation if UserFacility fails
     }
 
+    // Invalidate cache for this user's facilities
+    cacheService.invalidateFacilityStats(facility.id);
+    cacheService.invalidateUserFacilities(ownerId);
+
     res.status(201).json(facility);
   } catch (error) {
     console.error('Error creating facility:', error);
@@ -122,55 +233,56 @@ exports.createFacility = async (req, res) => {
 
 exports.updateFacility = async (req, res) => {
   try {
+    console.log('Updating facility:', req.params.id, 'with data:', req.body);
     const updatedFacility = await Facility.update(req.params.id, req.body);
     if (!updatedFacility) {
       return res.status(404).json({ message: 'Facility not found' });
     }
+    
+    // Invalidate cache for this facility
+    cacheService.invalidateFacilityStats(req.params.id);
+    
+    console.log('Successfully updated facility:', updatedFacility);
     res.json(updatedFacility);
   } catch (error) {
     console.error('Error updating facility:', error);
-    res.status(500).json({ message: 'Server error updating facility' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error updating facility',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
 exports.deleteFacility = async (req, res) => {
   try {
     const facilityId = req.params.id;
-    console.log(`Delete facility request for ID: ${facilityId}, User: ${req.userId}`);
-    
     // Check if facility exists and user is the owner
     const facility = await Facility.findById(facilityId);
     if (!facility) {
-      console.log(`Facility not found: ${facilityId}`);
       return res.status(404).json({ message: 'Facility not found' });
     }
     
     if (facility.ownerId !== req.userId) {
-      console.log(`User ${req.userId} is not owner of facility ${facilityId}. Owner is ${facility.ownerId}`);
       return res.status(403).json({ message: 'Only the facility owner can delete the facility' });
     }
 
-    console.log(`Starting cascading delete for facility: ${facilityId}`);
-
     // Get all projects in this facility
     const projects = await Project.findByFacility(facilityId);
-    console.log(`Found ${projects.length} projects in facility ${facilityId}`);
 
     // Delete all tasks and their related data for each project
     const taskDeletePromises = projects.map(async (project) => {
       try {
         const tasks = await Task.findByProject(project.id);
-        console.log(`Found ${tasks.length} tasks in project ${project.id}`);
         
         return Promise.all(tasks.map(async (task) => {
           try {
-            console.log(`Deleting task ${task.id} and its related data`);
             // Delete all task-related data
             const taskDeletePromises = [
               // Delete task comments
               TaskComment.findByTask(task.id).then(comments => {
                 if (comments && comments.length > 0) {
-                  console.log(`Deleting ${comments.length} comments for task ${task.id}`);
                   return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
                 }
                 return [];
@@ -182,7 +294,6 @@ exports.deleteFacility = async (req, res) => {
               // Delete task attachments
               TaskAttachment.findByTask(task.id).then(attachments => {
                 if (attachments && attachments.length > 0) {
-                  console.log(`Deleting ${attachments.length} attachments for task ${task.id}`);
                   return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
                 }
                 return [];
@@ -194,7 +305,6 @@ exports.deleteFacility = async (req, res) => {
               // Delete task dependencies
               TaskDependency.findByTask(task.id).then(dependencies => {
                 if (dependencies && dependencies.length > 0) {
-                  console.log(`Deleting ${dependencies.length} dependencies for task ${task.id}`);
                   return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
                 }
                 return [];
@@ -206,7 +316,6 @@ exports.deleteFacility = async (req, res) => {
               // Delete task subtasks
               TaskSubtask.findByTask(task.id).then(subtasks => {
                 if (subtasks && subtasks.length > 0) {
-                  console.log(`Deleting ${subtasks.length} subtasks for task ${task.id}`);
                   return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
                 }
                 return [];
@@ -218,7 +327,6 @@ exports.deleteFacility = async (req, res) => {
               // Delete task time logs
               TaskTimeLog.findByTask(task.id).then(timeLogs => {
                 if (timeLogs && timeLogs.length > 0) {
-                  console.log(`Deleting ${timeLogs.length} time logs for task ${task.id}`);
                   return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
                 }
                 return [];
@@ -230,7 +338,6 @@ exports.deleteFacility = async (req, res) => {
               // Delete task activity logs
               TaskActivityLog.findByTask(task.id).then(activityLogs => {
                 if (activityLogs && activityLogs.length > 0) {
-                  console.log(`Deleting ${activityLogs.length} activity logs for task ${task.id}`);
                   return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
                 }
                 return [];
@@ -244,7 +351,6 @@ exports.deleteFacility = async (req, res) => {
             await Promise.all(taskDeletePromises);
             
             // Delete the task itself
-            console.log(`Deleting task ${task.id}`);
             return Task.delete(task.id);
           } catch (taskError) {
             console.error(`Error deleting task ${task.id}:`, taskError);
@@ -259,12 +365,10 @@ exports.deleteFacility = async (req, res) => {
 
     // Wait for all tasks to be deleted
     await Promise.all(taskDeletePromises);
-    console.log(`All tasks deleted for facility ${facilityId}`);
 
     // Delete all projects in the facility
     const projectDeletePromises = projects.map(async (project) => {
       try {
-        console.log(`Deleting project ${project.id}`);
         return await Project.delete(project.id);
       } catch (error) {
         console.error(`Error deleting project ${project.id}:`, error);
@@ -272,14 +376,12 @@ exports.deleteFacility = async (req, res) => {
       }
     });
     await Promise.all(projectDeletePromises);
-    console.log(`All projects deleted for facility ${facilityId}`);
 
     // Delete all facility-related data
     const facilityDeletePromises = [
       // Delete user-facility relationships
       UserFacility.findByFacility(facilityId).then(relationships => {
         if (relationships && relationships.length > 0) {
-          console.log(`Deleting ${relationships.length} user-facility relationships for facility ${facilityId}`);
           return Promise.all(relationships.map(relationship => UserFacility.delete(relationship.id)));
         }
         return [];
@@ -291,7 +393,6 @@ exports.deleteFacility = async (req, res) => {
       // Delete facility invitations
       FacilityInvitation.findByFacility(facilityId).then(invitations => {
         if (invitations && invitations.length > 0) {
-          console.log(`Deleting ${invitations.length} facility invitations for facility ${facilityId}`);
           return Promise.all(invitations.map(invitation => FacilityInvitation.delete(invitation.id)));
         }
         return [];
@@ -303,7 +404,6 @@ exports.deleteFacility = async (req, res) => {
       // Delete facility share links
       FacilityShareLink.findByFacility(facilityId).then(shareLinks => {
         if (shareLinks && shareLinks.length > 0) {
-          console.log(`Deleting ${shareLinks.length} facility share links for facility ${facilityId}`);
           return Promise.all(shareLinks.map(shareLink => FacilityShareLink.delete(shareLink.id)));
         }
         return [];
@@ -315,7 +415,6 @@ exports.deleteFacility = async (req, res) => {
       // Delete facility join requests
       FacilityJoinRequest.findByFacility(facilityId).then(joinRequests => {
         if (joinRequests && joinRequests.length > 0) {
-          console.log(`Deleting ${joinRequests.length} facility join requests for facility ${facilityId}`);
           return Promise.all(joinRequests.map(joinRequest => FacilityJoinRequest.delete(joinRequest.id)));
         }
         return [];
@@ -327,7 +426,6 @@ exports.deleteFacility = async (req, res) => {
       // Delete facility notes
       Note.findByFacility(facilityId).then(notes => {
         if (notes && notes.length > 0) {
-          console.log(`Deleting ${notes.length} facility notes for facility ${facilityId}`);
           return Promise.all(notes.map(note => Note.delete(note.id)));
         }
         return [];
@@ -339,18 +437,25 @@ exports.deleteFacility = async (req, res) => {
 
     // Wait for all facility-related data to be deleted
     await Promise.all(facilityDeletePromises);
-    console.log(`All facility-related data deleted for facility ${facilityId}`);
+
+    // Get all user-facility relationships before deleting them for cache invalidation
+    const userRelationships = await UserFacility.findByFacility(facilityId);
+    const affectedUserIds = userRelationships.map(rel => rel.userId);
 
     // Finally delete the facility itself
     try {
-      console.log(`Deleting facility ${facilityId}`);
       const deleted = await Facility.delete(facilityId);
       if (!deleted) {
-        console.log(`Facility ${facilityId} not found during deletion`);
         return res.status(404).json({ message: 'Facility not found' });
       }
 
-      console.log(`Facility ${facilityId} deleted successfully`);
+      
+      // Invalidate cache for all affected users and the facility
+      affectedUserIds.forEach(userId => {
+        cacheService.invalidateUserFacilities(userId);
+      });
+      cacheService.invalidateFacility(facilityId);
+      
       res.json({ message: 'Facility and all related data deleted successfully' });
     } catch (facilityDeleteError) {
       console.error(`Error deleting facility ${facilityId}:`, facilityDeleteError);
@@ -358,9 +463,11 @@ exports.deleteFacility = async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting facility:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       message: 'Server error deleting facility',
-      error: error.message 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -406,7 +513,6 @@ exports.sendInvitation = async (req, res) => {
     const { email, role = 'member' } = req.body;
     const inviterUserId = req.userId;
 
-    console.log('Sending invitation:', { facilityId, email, role, inviterUserId });
 
     // Validate input
     if (!email || !email.trim()) {
@@ -468,7 +574,6 @@ exports.sendInvitation = async (req, res) => {
         await sendFacilityInvitationEmail(email.toLowerCase().trim(), invitation, facility, inviterName);
       }
       
-      console.log(`Facility invitation email sent successfully to ${email}`);
     } catch (emailError) {
       console.error('Failed to send invitation email:', emailError);
       // Don't fail the invitation creation if email fails
@@ -505,13 +610,11 @@ exports.getFacilityMembers = async (req, res) => {
     // Get facility owner info
     const facility = await Facility.findById(facilityId);
     
-    console.log(`Fetching details for ${relationships.length} facility members`);
     
     // Fetch user details for each member
     const membersWithDetails = await Promise.all(
       relationships.map(async (relation) => {
         try {
-          console.log(`Looking up user with ID: ${relation.userId}`);
           
           // Try multiple approaches to find the user
           let user = await User.findByFirebaseUid(relation.userId);
@@ -533,7 +636,6 @@ exports.getFacilityMembers = async (req, res) => {
               role: relation.role,
               joinedAt: relation.joinedAt,
               profilePicture: null,
-              avatarColor: generateAvatarColor(relation.userId),
               isOwner: relation.userId === facility.ownerId
             };
           }
@@ -554,7 +656,6 @@ exports.getFacilityMembers = async (req, res) => {
             fullName = `User ${relation.userId.substring(0, 8)}`;
           }
 
-          console.log(`Found user: ${fullName} (${user.email})`);
 
           return {
             id: relation.userId,
@@ -565,7 +666,6 @@ exports.getFacilityMembers = async (req, res) => {
             role: relation.role,
             joinedAt: relation.joinedAt,
             profilePicture: user.profilePicture || null,
-            avatarColor: generateAvatarColor(user.email || relation.userId),
             isOwner: relation.userId === facility.ownerId
           };
         } catch (userError) {
@@ -579,14 +679,12 @@ exports.getFacilityMembers = async (req, res) => {
             role: relation.role,
             joinedAt: relation.joinedAt,
             profilePicture: null,
-            avatarColor: generateAvatarColor(relation.userId),
             isOwner: relation.userId === facility.ownerId
           };
         }
       })
     );
 
-    console.log(`Successfully fetched details for ${membersWithDetails.length} members`);
 
     res.json({
       members: membersWithDetails,
@@ -611,21 +709,86 @@ exports.getFacilityStats = async (req, res) => {
     const projects = await Project.findByFacility(facilityId);
     const projectCount = projects.length;
 
-    // Get task count across all projects
+    // Get task statistics across all projects
     let totalTaskCount = 0;
+    let completedTaskCount = 0;
+    let openTaskCount = 0;
+    let overdueTaskCount = 0;
+    let nearestDueDate = null;
+
     for (const project of projects) {
       const tasks = await Task.findByProject(project.id);
       totalTaskCount += tasks.length;
+
+      tasks.forEach(task => {
+        // Count completed tasks
+        if (task.status === 'completed' || task.status === 'done') {
+          completedTaskCount++;
+        } else {
+          openTaskCount++;
+        }
+
+        // Check for overdue tasks
+        if (task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed' && task.status !== 'done') {
+          overdueTaskCount++;
+        }
+
+        // Find nearest due date
+        if (task.dueDate && (task.status !== 'completed' && task.status !== 'done')) {
+          const dueDate = new Date(task.dueDate);
+          if (!nearestDueDate || dueDate < nearestDueDate) {
+            nearestDueDate = dueDate;
+          }
+        }
+      });
     }
+
+    // Calculate completion percentage
+    const completionPercentage = totalTaskCount > 0 ? Math.round((completedTaskCount / totalTaskCount) * 100) : 0;
 
     res.json({
       memberCount,
       projectCount,
-      taskCount: totalTaskCount
+      taskCount: totalTaskCount,
+      completedTaskCount,
+      openTaskCount,
+      overdueTaskCount,
+      completionPercentage,
+      nearestDueDate: nearestDueDate ? nearestDueDate.toISOString() : null
     });
   } catch (error) {
     console.error('Error fetching facility stats:', error);
     res.status(500).json({ message: 'Server error fetching facility statistics' });
+  }
+};
+
+// Get facility tags
+exports.getFacilityTags = async (req, res) => {
+  try {
+    const { facilityId } = req.params;
+    
+    // Find all projects in the facility
+    const projects = await Project.findByFacility(facilityId);
+    
+    // Get all unique tags from tasks in these projects
+    const allTags = new Set();
+    
+    for (const project of projects) {
+      const tasks = await Task.findByProject(project.id);
+      tasks.forEach(task => {
+        if (task.tags && Array.isArray(task.tags)) {
+          task.tags.forEach(tag => allTags.add(tag));
+        }
+      });
+    }
+    
+    // Convert Set to Array and sort
+    const uniqueTags = Array.from(allTags).sort();
+    
+    res.json(uniqueTags);
+  } catch (error) {
+    console.error('Error fetching facility tags:', error);
+    res.status(500).json({ message: 'Server error fetching facility tags' });
   }
 };
 
@@ -637,6 +800,11 @@ exports.updateMemberRole = async (req, res) => {
 
     // Update the user-facility relationship
     await UserFacility.updateUserRole(req.targetUserRelation.id, newRole);
+
+    // Invalidate cache for the user and facility
+    cacheService.invalidateUserFacilities(targetUserId);
+    cacheService.invalidateFacilityStats(facilityId);
+    cacheService.invalidateFacilityMembers(facilityId);
 
     res.json({
       message: 'Member role updated successfully',
@@ -669,6 +837,11 @@ exports.removeMember = async (req, res) => {
 
     // Remove the user from facility
     await UserFacility.removeUserFromFacility(targetUserId, facilityId);
+
+    // Invalidate cache for the removed member and facility
+    cacheService.invalidateUserFacilities(targetUserId);
+    cacheService.invalidateFacilityStats(facilityId);
+    cacheService.invalidateFacilityMembers(facilityId);
 
     res.json({
       message: 'Member removed successfully',
@@ -731,6 +904,7 @@ exports.getShareLink = async (req, res) => {
     const { facilityId } = req.params;
 
     const shareLink = await FacilityShareLink.findActiveLinkByFacility(facilityId);
+    
     if (!shareLink) {
       return res.status(404).json({ message: 'No active share link found' });
     }
@@ -748,7 +922,6 @@ exports.getShareLink = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching share link:', error);
     res.status(500).json({ message: 'Server error fetching share link' });
   }
 };
@@ -823,6 +996,11 @@ exports.joinViaShareLink = async (req, res) => {
     // Add user to facility
     await UserFacility.addUserToFacility(joiningUserId, shareLink.facilityId, shareLink.role);
 
+    // Invalidate cache for the new member so they can see the facility immediately
+    cacheService.invalidateUserFacilities(joiningUserId);
+    cacheService.invalidateFacilityStats(shareLink.facilityId);
+    cacheService.invalidateFacilityMembers(shareLink.facilityId);
+
     // Get facility details
     const facility = await Facility.findById(shareLink.facilityId);
 
@@ -873,8 +1051,8 @@ exports.requestToJoinViaShareLink = async (req, res) => {
     const joinRequest = await FacilityJoinRequest.createJoinRequest(
       shareLink.facilityId,
       requestingUserId,
-      shareLink.linkId,
-      message
+      message,
+      shareLink.linkId
     );
 
     // Use the share link to track usage
@@ -909,13 +1087,11 @@ exports.getJoinRequests = async (req, res) => {
 
     const joinRequests = await FacilityJoinRequest.findByFacility(facilityId, status);
 
-    console.log(`Fetching details for ${joinRequests.length} join requests`);
 
     // Fetch user details for each request
     const requestsWithDetails = await Promise.all(
       joinRequests.map(async (request) => {
         try {
-          console.log(`Looking up user for join request: ${request.requestingUserId}`);
           
           // Try multiple approaches to find the user
           let user = await User.findByFirebaseUid(request.requestingUserId);
@@ -959,7 +1135,6 @@ exports.getJoinRequests = async (req, res) => {
             fullName = `User ${request.requestingUserId.substring(0, 8)}`;
           }
 
-          console.log(`Found user for join request: ${fullName} (${user.email})`);
 
           return {
             id: request.id,
@@ -996,7 +1171,6 @@ exports.getJoinRequests = async (req, res) => {
       })
     );
 
-    console.log(`Successfully fetched details for ${requestsWithDetails.length} join requests`);
 
     res.json({
       joinRequests: requestsWithDetails,
@@ -1021,13 +1195,17 @@ exports.approveJoinRequest = async (req, res) => {
     // Add user to facility
     await UserFacility.addUserToFacility(request.requestingUserId, request.facilityId, assignedRole);
 
+    // Invalidate cache for the new member so they can see the facility immediately
+    cacheService.invalidateUserFacilities(request.requestingUserId);
+    cacheService.invalidateFacilityStats(request.facilityId);
+    cacheService.invalidateFacilityMembers(request.facilityId);
+
     res.json({
       message: 'Join request approved successfully',
       requestId: requestId,
       assignedRole: assignedRole
     });
   } catch (error) {
-    console.error('Error approving join request:', error);
     if (error.message.includes('already a member')) {
       return res.status(400).json({ message: error.message });
     }
@@ -1071,6 +1249,11 @@ exports.leaveFacility = async (req, res) => {
     // Remove user from facility
     await UserFacility.removeUserFromFacility(leavingUserId, facilityId);
 
+    // Invalidate cache for the leaving member and facility
+    cacheService.invalidateUserFacilities(leavingUserId);
+    cacheService.invalidateFacilityStats(facilityId);
+    cacheService.invalidateFacilityMembers(facilityId);
+
     res.json({
       message: 'Successfully left facility'
     });
@@ -1099,14 +1282,6 @@ exports.getInvitationDetails = async (req, res) => {
     const expirationDate = new Date(invitation.expiresAt);
     let statusMessage = null;
 
-    // Debug logging
-    console.log('Invitation details:', {
-      status: invitation.status,
-      expiresAt: invitation.expiresAt,
-      expirationDate: expirationDate.toISOString(),
-      now: now.toISOString(),
-      isExpired: now > expirationDate
-    });
 
     if (invitation.status === 'expired' || now > expirationDate) {
       // Mark as expired if not already
@@ -1178,6 +1353,11 @@ exports.acceptInvitation = async (req, res) => {
     // Add user to facility
     await UserFacility.addUserToFacility(acceptingUserId, invitation.facilityId, invitation.role);
 
+    // Invalidate cache for the new member so they can see the facility immediately
+    cacheService.invalidateUserFacilities(acceptingUserId);
+    cacheService.invalidateFacilityStats(invitation.facilityId);
+    cacheService.invalidateFacilityMembers(invitation.facilityId);
+
     // Get facility details for response
     const facility = await Facility.findById(invitation.facilityId);
 
@@ -1191,7 +1371,6 @@ exports.acceptInvitation = async (req, res) => {
       role: invitation.role
     });
   } catch (error) {
-    console.error('Error accepting invitation:', error);
     if (error.message.includes('expired') || error.message.includes('valid')) {
       return res.status(400).json({ message: error.message });
     }

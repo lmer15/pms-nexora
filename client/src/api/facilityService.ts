@@ -1,4 +1,5 @@
 import api from './api';
+import cacheService from '../services/cacheService';
 
 export interface Facility {
   id: string;
@@ -27,6 +28,11 @@ export interface FacilityStats {
   memberCount: number;
   projectCount: number;
   taskCount: number;
+  completedTaskCount: number;
+  openTaskCount: number;
+  overdueTaskCount: number;
+  completionPercentage: number;
+  nearestDueDate: string | null;
 }
 
 export const facilityService = {
@@ -38,8 +44,19 @@ export const facilityService = {
 
   // Get facility by ID
   getById: async (id: string): Promise<Facility> => {
+    // Check cache first
+    const cached = cacheService.getFacility(id) as Facility | null;
+    if (cached) {
+      return cached;
+    }
+
     const response = await api.get(`/facilities/${id}`);
-    return response.data;
+    const facility = response.data;
+    
+    // Cache the result
+    cacheService.setFacility(id, facility);
+    
+    return facility;
   },
 
   // Create new facility
@@ -67,13 +84,61 @@ export const facilityService = {
 
   // Get facility statistics
   getFacilityStats: async (facilityId: string): Promise<FacilityStats> => {
+    // Check cache first
+    const cached = cacheService.getFacilityStats(facilityId) as FacilityStats | null;
+    if (cached) {
+      return cached;
+    }
+
     const response = await api.get(`/facilities/${facilityId}/stats`);
+    const stats = response.data;
+    
+    // Cache the result
+    cacheService.setFacilityStats(facilityId, stats);
+    
+    return stats;
+  },
+
+  getFacilityTags: async (facilityId: string): Promise<string[]> => {
+    const response = await api.get(`/facilities/${facilityId}/tags`);
     return response.data;
   },
 
   // Update facility status
   updateStatus: async (facilityId: string, status: 'active' | 'inactive' | 'archived'): Promise<Facility> => {
     const response = await api.put(`/facilities/${facilityId}`, { status });
+    return response.data;
+  },
+
+  // Optimized method to get facility with all data in one request
+  getWithData: async (id: string, includeTasks: boolean = true): Promise<{
+    facility: Facility;
+    projects: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      facilityId: string;
+      status: string;
+      archived: boolean;
+      createdAt: string;
+      updatedAt: string;
+      tasks: Array<{
+        id: string;
+        title: string;
+        description?: string;
+        status: string;
+        priority: string;
+        assigneeId?: string;
+        projectId: string;
+        dueDate?: string;
+        tags: string[];
+        progress: number;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    }>;
+  }> => {
+    const response = await api.get(`/facilities/${id}/data?includeTasks=${includeTasks}`);
     return response.data;
   },
 };

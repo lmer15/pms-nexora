@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { validateTask, validateTaskUpdate, validatePagination, sanitizeInput, rateLimit } = require('../middleware/validationMiddleware');
 const {
   getTasks,
   getTaskById,
@@ -21,14 +22,18 @@ const taskSubtaskRoutes = require('./taskSubtaskRoutes');
 const taskTimeLogRoutes = require('./taskTimeLogRoutes');
 const taskActivityLogRoutes = require('./taskActivityLogRoutes');
 
+// Apply rate limiting and sanitization to all routes
+router.use(rateLimit(200, 15 * 60 * 1000)); // 200 requests per 15 minutes
+router.use(sanitizeInput);
+
 // Routes
 router.get('/', authMiddleware, getTasks);
 router.get('/:id', authMiddleware, getTaskById);
 router.get('/:id/details', authMiddleware, getTaskDetails);
-router.get('/project/:projectId', authMiddleware, getTasksByProject);
+router.get('/project/:projectId', authMiddleware, validatePagination, getTasksByProject);
 router.get('/user/:userId', authMiddleware, getTasksByUser);
-router.post('/', authMiddleware, createTask);
-router.put('/:id', authMiddleware, updateTask);
+router.post('/', authMiddleware, validateTask, createTask);
+router.put('/:id', authMiddleware, validateTaskUpdate, updateTask);
 router.put('/:id/pin', authMiddleware, pinTask);
 router.delete('/:id', authMiddleware, deleteTask);
 

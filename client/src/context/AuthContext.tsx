@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { authService } from '../api/authService';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorMessages';
+import { storage } from '../utils/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -52,14 +53,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const response = await authService.syncUser(idToken);
           setToken(response.token);
+          // Store token in localStorage for API interceptor
+          storage.setToken(response.token);
         } catch (error) {
           console.error('Failed to sync user with backend:', error);
           // If sync fails, logout to prevent loop
           await firebaseSignOut(auth);
           setToken(null);
+          storage.removeToken();
         }
       } else {
         setToken(null);
+        storage.removeToken();
       }
       setLoading(false);
     });
@@ -81,6 +86,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Verify with backend
       const response = await authService.verifyToken(idToken);
       setToken(response.token);
+      // Store token in localStorage for API interceptor
+      storage.setToken(response.token);
     } catch (error: any) {
       // Handle specific cases first
       if (error.code === 'auth/user-not-found') {
@@ -107,6 +114,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const idToken = await userCredential.user.getIdToken();
     const response = await authService.registerUser(idToken, firstName, lastName);
     setToken(response.token);
+    // Store token in localStorage for API interceptor
+    storage.setToken(response.token);
   };
 
   const googleLogin = async (idToken: string) => {
@@ -114,6 +123,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Verify with backend and get JWT
       const response = await authService.googleAuth(idToken);
       setToken(response.token);
+      // Store token in localStorage for API interceptor
+      storage.setToken(response.token);
 
       // Navigate to dashboard after successful authentication
       navigate('/dashboard', { replace: true });
@@ -131,6 +142,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     await firebaseSignOut(auth);
     setToken(null);
+    storage.clearAuthData();
   };
 
   const value = {
