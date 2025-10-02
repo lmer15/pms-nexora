@@ -5,12 +5,22 @@ export interface Task {
   status: 'todo' | 'in-progress' | 'review' | 'done';
   assignee?: string;
   assigneeName?: string;
+  assigneeProfilePicture?: string;
+  assignees?: Array<{
+    id: string;
+    name: string;
+    profilePicture?: string;
+  }>;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   dueDate?: string;
   creatorId: string;
   createdAt: string;
   updatedAt: string;
   tags?: string[];
+  estimatedDuration?: number;
+  actualCompletionDate?: string;
+  progress?: number;
+  pinned?: boolean;
 }
 
 export interface Column {
@@ -32,7 +42,7 @@ export interface Project {
   facilityId: string;
   creatorId: string;
   assignees: string[];
-  status: string;
+  status: 'planning' | 'in-progress' | 'completed' | 'on-hold' | 'critical';
   archived: boolean;
   // Add other project properties as needed
 }

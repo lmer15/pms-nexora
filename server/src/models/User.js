@@ -1,4 +1,5 @@
 const FirestoreService = require('../services/firestoreService');
+const admin = require('firebase-admin');
 
 class User extends FirestoreService {
   constructor() {
@@ -59,33 +60,35 @@ class User extends FirestoreService {
     
     const profiles = {};
     
-    // Firestore 'in' queries are limited to 10 items
-    const chunks = [];
-    for (let i = 0; i < userIds.length; i += 10) {
-      chunks.push(userIds.slice(i, i + 10));
-    }
-    
-    const promises = chunks.map(chunk => 
-      this.collection.where('firebaseUid', 'in', chunk).get()
-    );
-    
-    const snapshots = await Promise.all(promises);
-    
-    snapshots.forEach(snapshot => {
-      snapshot.docs.forEach(doc => {
-        const user = doc.data();
-        const userId = user.firebaseUid || doc.id;
-        profiles[userId] = {
-          id: userId,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          displayName: user.displayName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-          profilePicture: user.profilePicture
-        };
-      });
+    // Use individual document fetches instead of 'in' queries for document IDs
+    const promises = userIds.map(async (userId) => {
+      try {
+        // Handle both string IDs and objects with id property
+        const actualUserId = typeof userId === 'string' ? userId : (userId && userId.id ? userId.id : null);
+        
+        if (!actualUserId) {
+          console.warn('Invalid userId provided:', userId);
+          return;
+        }
+        
+        const doc = await this.collection.doc(actualUserId).get();
+        if (doc.exists) {
+          const user = doc.data();
+          profiles[actualUserId] = {
+            id: actualUserId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            displayName: user.displayName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            profilePicture: user.profilePicture
+          };
+        }
+      } catch (error) {
+        console.error(`Error fetching user ${userId}:`, error);
+      }
     });
     
+    await Promise.all(promises);
     return profiles;
   }
 }

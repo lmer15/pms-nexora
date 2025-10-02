@@ -7,7 +7,7 @@ export interface Project {
   facilityId: string;
   creatorId: string;
   assignees: string[];
-  status: 'planning' | 'in-progress' | 'completed' | 'on-hold';
+  status: 'planning' | 'in-progress' | 'completed' | 'on-hold' | 'critical';
   archived: boolean;
   createdAt: string;
   updatedAt: string;

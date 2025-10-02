@@ -88,7 +88,7 @@ class Project extends FirestoreService {
 
   // Update project status
   async updateStatus(projectId, status) {
-    const validStatuses = ['planning', 'in-progress', 'completed', 'on-hold'];
+    const validStatuses = ['planning', 'in-progress', 'completed', 'on-hold', 'critical'];
     if (!validStatuses.includes(status)) {
       throw new Error('Invalid status');
     }

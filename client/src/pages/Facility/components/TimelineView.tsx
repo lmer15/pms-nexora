@@ -34,12 +34,51 @@ const TimelineView: React.FC<TimelineViewProps> = ({
   const [showDependencies, setShowDependencies] = useState(true);
   const timelineRef = useRef<HTMLDivElement>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [localColumns, setLocalColumns] = useState<Column[]>(columns);
+
+  // Sync local columns with props
+  useEffect(() => {
+    setLocalColumns(columns);
+  }, [columns]);
+
+  // Listen for task updates to refresh task information
+  useEffect(() => {
+    const handleTaskUpdated = (event: CustomEvent) => {
+      const updatedTask = event.detail;
+      setLocalColumns(prevColumns =>
+        prevColumns.map(column => ({
+          ...column,
+          tasks: column.tasks.map(task =>
+            task.id === updatedTask.id ? updatedTask : task
+          )
+        }))
+      );
+    };
+
+    const handleTaskDeleted = (event: CustomEvent) => {
+      const { taskId } = event.detail;
+      setLocalColumns(prevColumns =>
+        prevColumns.map(column => ({
+          ...column,
+          tasks: column.tasks.filter(task => task.id !== taskId)
+        }))
+      );
+    };
+
+    window.addEventListener('taskUpdated', handleTaskUpdated as EventListener);
+    window.addEventListener('taskDeleted', handleTaskDeleted as EventListener);
+
+    return () => {
+      window.removeEventListener('taskUpdated', handleTaskUpdated as EventListener);
+      window.removeEventListener('taskDeleted', handleTaskDeleted as EventListener);
+    };
+  }, []);
 
   // Flatten all tasks with timeline information
   const timelineTasks = useMemo(() => {
     const tasks: TimelineTask[] = [];
     
-    columns.forEach(column => {
+    localColumns.forEach(column => {
       column.tasks.forEach(task => {
         // Use dueDate as endDate, calculate startDate if not provided
         const endDate = task.dueDate;
@@ -61,7 +100,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     });
     
     return tasks;
-  }, [columns]);
+  }, [localColumns]);
 
   // Group tasks by project
   const groupedTasks = useMemo(() => {
@@ -224,7 +263,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
   };
 
   return (
-    <div className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+    <div className={`h-full flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Header */}
       <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
         <div className="flex items-center justify-between mb-4">
@@ -361,7 +400,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                   
                   return (
                     <div
-                      key={task.id}
+                      key={`${task.id}-${(task as any)._clientUpdatedAt || task.updatedAt || task.createdAt}`}
                       className={`flex border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} hover:${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}
                     >
                       {/* Task Name */}

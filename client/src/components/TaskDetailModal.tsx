@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { TaskDetails, taskService, Task, TaskComment, TaskAttachment, TaskDependency, TaskSubtask, TaskTimeLog, TaskActivityLog } from '../api/taskService';
 import { projectService } from '../api/projectService';
 import { useAuth } from '../hooks/useAuth';
+import { useFacilityRefresh } from '../context/FacilityRefreshContext';
 import { LucideX, LucideMessageSquare, LucidePaperclip, LucideGitBranch, LucideCheckSquare, LucideClock, LucideActivity, LucideFileText, LucideMoreHorizontal } from 'lucide-react';
 import LoadingAnimation from './LoadingAnimation';
 import { ErrorAlert } from './ui/error-alert';
@@ -26,6 +27,7 @@ interface TaskDetailModalProps {
 type TabType = 'overview' | 'comments' | 'attachments' | 'dependencies' | 'subtasks' | 'timelogs' | 'activity';
 
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClose }) => {
+  const { triggerUserProfileRefresh } = useFacilityRefresh();
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +37,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const [titleSaving, setTitleSaving] = useState(false);
   const [facilityId, setFacilityId] = useState<string>('');
   const [projectOwnerId, setProjectOwnerId] = useState<string>('');
+  const loadingRef = useRef(false);
 
   // UI State
   const [confirmationDialog, setConfirmationDialog] = useState<{
@@ -66,6 +69,26 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const [commentCount, setCommentCount] = useState(0);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const lastEventDispatchRef = useRef<{ taskId: string; timestamp: number } | null>(null);
+
+  // Helper function to prevent duplicate event dispatching
+  const dispatchTaskUpdatedEvent = (taskData: any) => {
+    const now = Date.now();
+    const lastDispatch = lastEventDispatchRef.current;
+    
+    if (lastDispatch && 
+        lastDispatch.taskId === taskData.id && 
+        now - lastDispatch.timestamp < 100) {
+      return;
+    }
+    
+    lastEventDispatchRef.current = { taskId: taskData.id, timestamp: now };
+    
+    const taskUpdatedEvent = new CustomEvent('taskUpdated', {
+      detail: taskData
+    });
+    window.dispatchEvent(taskUpdatedEvent);
+  };
 
   useEffect(() => {
     setIsDarkMode(document.documentElement.classList.contains('dark'));
@@ -81,9 +104,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && taskId) {
       loadTaskDetails();
       setActiveTab('overview'); // Reset to overview when opening
+    } else if (!isOpen) {
+      // Reset loading state when modal closes
+      loadingRef.current = false;
     }
   }, [isOpen, taskId]);
 
@@ -94,17 +120,18 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   }, [taskDetails?.comments]);
 
   const loadTaskDetails = async () => {
+    // Prevent duplicate calls
+    if (loadingRef.current) {
+      return;
+    }
+    
+    loadingRef.current = true;
     setLoading(true);
     setError('');
+    
     try {
       const details = await taskService.getTaskDetails(taskId);
       setTaskDetails(details);
-
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: details.task
-      });
-      window.dispatchEvent(taskUpdatedEvent);
 
       // Fetch project to get facilityId and owner
       if (details.task.projectId) {
@@ -112,11 +139,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
         setFacilityId(project.facilityId);
         if (project.creatorId) setProjectOwnerId(project.creatorId);
       }
-    } catch (err) {
-      setError('Failed to load task details');
+    } catch (err: any) {
+      const errorMessage = err.response?.status === 429 
+        ? 'Too many requests. Please wait a moment and try again.'
+        : 'Failed to load task details';
+      setError(errorMessage);
       console.error(err);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   };
 
@@ -128,13 +159,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const handleFieldChangeAndSave = async (field: keyof Task, value: any) => {
     if (!taskDetails) return;
     try {
-      // Update local state immediately for UI responsiveness
       setEditedTask((prev) => ({ ...prev, [field]: value }));
       
       // Save to database
       const updatedTask = await taskService.update(taskDetails.task.id, { [field]: value });
-      
-      // Update the task details state with the response from the server
       const updatedTaskData = {
         ...taskDetails.task,
         [field]: value,
@@ -149,11 +177,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
         };
       });
       
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: updatedTaskData
-      });
-      window.dispatchEvent(taskUpdatedEvent);
+      dispatchTaskUpdatedEvent(updatedTaskData);
+        if (field === 'assignees' as keyof Task) {
+          triggerUserProfileRefresh(Array.isArray(value) ? value : [value]);
+        }
       
       setWarningToast({ isVisible: true, message: 'Task updated successfully', type: 'success' });
     } catch (err) {
@@ -170,15 +197,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       const updatedTask = await taskService.update(taskDetails.task.id, { title });
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: {
-          ...taskDetails.task,
-          title,
-          updatedAt: updatedTask.updatedAt
-        }
+      dispatchTaskUpdatedEvent({
+        ...taskDetails.task,
+        title,
+        updatedAt: updatedTask.updatedAt
       });
-      window.dispatchEvent(taskUpdatedEvent);
       
       setWarningToast({ isVisible: true, message: 'Title updated', type: 'success' });
     } catch (err) {
@@ -195,15 +218,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       const updatedTask = await taskService.update(taskDetails.task.id, { status });
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: {
-          ...taskDetails.task,
-          status,
-          updatedAt: updatedTask.updatedAt
-        }
+      // Note: loadTaskDetails() no longer dispatches events, so we dispatch here
+      dispatchTaskUpdatedEvent({
+        ...taskDetails.task,
+        status,
+        updatedAt: updatedTask.updatedAt
       });
-      window.dispatchEvent(taskUpdatedEvent);
       
       setWarningToast({ isVisible: true, message: 'Status updated', type: 'success' });
     } catch (err) {
@@ -218,15 +238,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
       const updatedTask = await taskService.pin(taskDetails.task.id, pinned);
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: {
-          ...taskDetails.task,
-          pinned,
-          updatedAt: updatedTask.updatedAt
-        }
+      dispatchTaskUpdatedEvent({
+        ...taskDetails.task,
+        pinned,
+        updatedAt: updatedTask.updatedAt
       });
-      window.dispatchEvent(taskUpdatedEvent);
       
       setWarningToast({ 
         isVisible: true, 
@@ -248,9 +264,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     try {
       await taskService.delete(taskDetails.task.id);
       setShowDeleteConfirmation(false);
-      onClose(); // Close the modal after successful deletion
-      
-      // Dispatch custom event to notify FacilityView of the deletion
+      onClose(); 
       const taskDeletedEvent = new CustomEvent('taskDeleted', {
         detail: { taskId: taskDetails.task.id }
       });
@@ -294,7 +308,33 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
     setWarningToast({ isVisible: true, message, type: mappedType });
   };
 
-  const closeModal = () => {
+  const closeModal = async () => {
+    if (taskDetails && Object.keys(editedTask).length > 0) {
+      try {
+        const updatedTask = await taskService.update(taskDetails.task.id, editedTask);
+        const updatedTaskData = {
+          ...taskDetails.task,
+          ...editedTask,
+          updatedAt: updatedTask.updatedAt
+        };
+        
+        setTaskDetails(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            task: updatedTaskData
+          };
+        });
+        
+        dispatchTaskUpdatedEvent(updatedTaskData);
+        
+        setWarningToast({ isVisible: true, message: 'Changes saved', type: 'success' });
+      } catch (err) {
+        console.error('Failed to save changes before closing:', err);
+        setWarningToast({ isVisible: true, message: 'Failed to save changes', type: 'error' });
+      }
+    }
+    
     setEditedTask({});
     onClose();
   };

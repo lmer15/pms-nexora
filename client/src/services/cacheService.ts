@@ -116,6 +116,24 @@ class CacheService {
     this.invalidateProject(projectId);
   }
 
+  // Invalidate user profile cache
+  invalidateUserProfiles(userIds?: string[]) {
+    if (userIds) {
+      // Invalidate specific user profiles
+      const key = this.generateKey('user_profiles', userIds.sort().join(','));
+      this.delete(key);
+    } else {
+      // Invalidate all user profile caches
+      const keysToDelete: string[] = [];
+      this.cache.forEach((_, key) => {
+        if (key.startsWith('user_profiles:')) {
+          keysToDelete.push(key);
+        }
+      });
+      keysToDelete.forEach(key => this.delete(key));
+    }
+  }
+
   // Get cache size for debugging
   getCacheSize(): number {
     return this.cache.size;

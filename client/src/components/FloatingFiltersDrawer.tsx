@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LucideX, LucideFilter, LucideUser, LucideFlag, LucideTag, LucideSearch, LucideRotateCcw } from 'lucide-react';
+import { LucideX, LucideFilter, LucideSearch, LucideRotateCcw } from 'lucide-react';
 
 interface FloatingFiltersDrawerProps {
   isOpen: boolean;
@@ -8,18 +8,9 @@ interface FloatingFiltersDrawerProps {
   // Current filter values
   searchTerm: string;
   filter: string;
-  assigneeFilter: string;
-  tagFilter: string;
-  priorityFilter: string;
   // Filter setters
   setSearchTerm: (term: string) => void;
   setFilter: (filter: string) => void;
-  setAssigneeFilter: (assignee: string) => void;
-  setTagFilter: (tag: string) => void;
-  setPriorityFilter: (priority: string) => void;
-  // Available options
-  availableAssignees: Array<{id: string, name: string}>;
-  availableTags: string[];
 }
 
 const FloatingFiltersDrawer: React.FC<FloatingFiltersDrawerProps> = ({
@@ -28,62 +19,36 @@ const FloatingFiltersDrawer: React.FC<FloatingFiltersDrawerProps> = ({
   isDarkMode,
   searchTerm,
   filter,
-  assigneeFilter,
-  tagFilter,
-  priorityFilter,
   setSearchTerm,
   setFilter,
-  setAssigneeFilter,
-  setTagFilter,
-  setPriorityFilter,
-  availableAssignees,
-  availableTags,
 }) => {
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
   const [localFilter, setLocalFilter] = useState(filter);
-  const [localAssigneeFilter, setLocalAssigneeFilter] = useState(assigneeFilter);
-  const [localTagFilter, setLocalTagFilter] = useState(tagFilter);
-  const [localPriorityFilter, setLocalPriorityFilter] = useState(priorityFilter);
 
   // Sync local state with props
   useEffect(() => {
     setLocalSearchTerm(searchTerm);
     setLocalFilter(filter);
-    setLocalAssigneeFilter(assigneeFilter);
-    setLocalTagFilter(tagFilter);
-    setLocalPriorityFilter(priorityFilter);
-  }, [searchTerm, filter, assigneeFilter, tagFilter, priorityFilter]);
+  }, [searchTerm, filter]);
 
   const handleApplyFilters = () => {
     setSearchTerm(localSearchTerm);
     setFilter(localFilter);
-    setAssigneeFilter(localAssigneeFilter);
-    setTagFilter(localTagFilter);
-    setPriorityFilter(localPriorityFilter);
     onClose();
   };
 
   const handleResetFilters = () => {
     setLocalSearchTerm('');
     setLocalFilter('all');
-    setLocalAssigneeFilter('all');
-    setLocalTagFilter('all');
-    setLocalPriorityFilter('all');
   };
 
   const hasChanges = 
     localSearchTerm !== searchTerm ||
-    localFilter !== filter ||
-    localAssigneeFilter !== assigneeFilter ||
-    localTagFilter !== tagFilter ||
-    localPriorityFilter !== priorityFilter;
+    localFilter !== filter;
 
   const hasActiveFilters = 
     localSearchTerm ||
-    localFilter !== 'all' ||
-    localAssigneeFilter !== 'all' ||
-    localTagFilter !== 'all' ||
-    localPriorityFilter !== 'all';
+    localFilter !== 'all';
 
   if (!isOpen) return null;
 
@@ -165,75 +130,8 @@ const FloatingFiltersDrawer: React.FC<FloatingFiltersDrawerProps> = ({
               </div>
             </div>
 
-            {/* Assignee Filter */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <LucideUser className="w-4 h-4 inline mr-1" />
-                Assignee
-              </label>
-              <select
-                value={localAssigneeFilter}
-                onChange={(e) => setLocalAssigneeFilter(e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand ${
-                  isDarkMode 
-                    ? 'bg-gray-800 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              >
-                <option value="all">All Assignees</option>
-                {availableAssignees.map((assignee) => (
-                  <option key={assignee.id} value={assignee.name}>
-                    {assignee.name}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            {/* Priority Filter */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <LucideFlag className="w-4 h-4 inline mr-1" />
-                Priority
-              </label>
-              <select
-                value={localPriorityFilter}
-                onChange={(e) => setLocalPriorityFilter(e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand ${
-                  isDarkMode 
-                    ? 'bg-gray-800 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              >
-                <option value="all">All Priorities</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
 
-            {/* Tag Filter */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <LucideTag className="w-4 h-4 inline mr-1" />
-                Tags
-              </label>
-              <select
-                value={localTagFilter}
-                onChange={(e) => setLocalTagFilter(e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand ${
-                  isDarkMode 
-                    ? 'bg-gray-800 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              >
-                <option value="all">All Tags</option>
-                {availableTags.map((tag) => (
-                  <option key={tag} value={tag}>
-                    {tag}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {/* Footer */}
@@ -241,12 +139,9 @@ const FloatingFiltersDrawer: React.FC<FloatingFiltersDrawerProps> = ({
             {/* Active Filters Summary */}
             {hasActiveFilters && (
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                Active filters: {[
+                Active filters:                 {[
                   localSearchTerm && 'Search',
                   localFilter !== 'all' && 'Status',
-                  localAssigneeFilter !== 'all' && 'Assignee',
-                  localTagFilter !== 'all' && 'Tags',
-                  localPriorityFilter !== 'all' && 'Priority',
                 ].filter(Boolean).join(', ')}
               </div>
             )}

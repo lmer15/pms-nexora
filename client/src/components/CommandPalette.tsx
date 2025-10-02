@@ -22,6 +22,8 @@ interface CommandPaletteProps {
   assignees?: Array<{
     id: string;
     name: string;
+    email?: string;
+    profilePicture?: string;
   }>;
   tags?: string[];
   // Actions

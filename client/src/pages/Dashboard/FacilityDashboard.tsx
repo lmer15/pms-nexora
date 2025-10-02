@@ -22,6 +22,11 @@ const statusColors: Record<string, string> = {
   'in-progress': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
   todo: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
   blocked: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  // Project statuses
+  planning: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  'on-hold': 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
+  critical: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   // Legacy statuses for backward compatibility
   Completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   Delayed: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -330,6 +335,7 @@ const FacilityDashboard: React.FC = () => {
                 <option value="in-progress">In Progress</option>
                 <option value="completed">Completed</option>
                 <option value="on-hold">On Hold</option>
+                <option value="critical">Critical</option>
               </select>
             </div>
           </div>

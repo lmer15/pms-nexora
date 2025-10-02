@@ -146,7 +146,19 @@ exports.getFacilityWithData = async (req, res) => {
       
       // Get all unique assignee IDs for batch lookup
       const allTasks = Object.values(tasksData).flat();
-      const assigneeIds = [...new Set(allTasks.map(task => task.assigneeId).filter(Boolean))];
+      
+      // Handle both assigneeId (singular) and assigneeIds (plural) field names
+      const assigneeIds = [...new Set(
+        allTasks.flatMap(task => {
+          if (task.assigneeIds && Array.isArray(task.assigneeIds)) {
+            return task.assigneeIds; // Handle assigneeIds (plural, array)
+          } else if (task.assigneeId) {
+            return [task.assigneeId]; // Handle assigneeId (singular, string)
+          }
+          return [];
+        }).filter(Boolean)
+      )];
+      
       
       // Batch fetch user profiles to populate assignee names
       if (assigneeIds.length > 0) {
@@ -158,12 +170,42 @@ exports.getFacilityWithData = async (req, res) => {
           tasksData[projectId] = tasksData[projectId].map(task => {
             const taskData = { ...task };
             
-            // Add assignee name if assigneeId exists
-            if (task.assigneeId) {
+            // Handle both assigneeId (singular) and assigneeIds (plural) field names
+            if (task.assigneeIds && Array.isArray(task.assigneeIds) && task.assigneeIds.length > 0) {
+              // Handle assigneeIds (plural, array) - send all assignees
+              taskData.assignees = task.assigneeIds.map(assigneeId => ({
+                id: assigneeId,
+                name: userProfiles[assigneeId]?.displayName || 
+                      userProfiles[assigneeId]?.email || 
+                      'Unknown User',
+                profilePicture: userProfiles[assigneeId]?.profilePicture
+              }));
+              
+              // Keep backward compatibility - use first assignee for primary fields
+              const primaryAssigneeId = task.assigneeIds[0];
+              taskData.assignee = primaryAssigneeId;
+              taskData.assigneeId = primaryAssigneeId;
+              taskData.assigneeName = userProfiles[primaryAssigneeId]?.displayName || 
+                                     userProfiles[primaryAssigneeId]?.email || 
+                                     'Unknown User';
+              taskData.assigneeProfilePicture = userProfiles[primaryAssigneeId]?.profilePicture;
+              
+            } else if (task.assigneeId) {
+              // Handle assigneeId (singular, string)
+              taskData.assignees = [{
+                id: task.assigneeId,
+                name: userProfiles[task.assigneeId]?.displayName || 
+                      userProfiles[task.assigneeId]?.email || 
+                      'Unknown User',
+                profilePicture: userProfiles[task.assigneeId]?.profilePicture
+              }];
+              
               taskData.assignee = task.assigneeId;
               taskData.assigneeName = userProfiles[task.assigneeId]?.displayName || 
                                      userProfiles[task.assigneeId]?.email || 
                                      'Unknown User';
+              taskData.assigneeProfilePicture = userProfiles[task.assigneeId]?.profilePicture;
+              
             }
             
             // Convert timestamps to ISO strings

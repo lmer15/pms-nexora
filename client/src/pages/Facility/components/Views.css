@@ -3,6 +3,36 @@
   transition: all 0.3s ease-in-out;
 }
 
+/* Enhanced View Transitions */
+.view-container {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.view-container.entering {
+  opacity: 0;
+  transform: translateX(100%) scale(0.95);
+}
+
+.view-container.entered {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.view-container.exiting {
+  opacity: 0;
+  transform: translateX(-100%) scale(0.95);
+}
+
+/* Floating Navigation Styles - Simplified */
+.floating-nav {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark .floating-nav {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+}
+
 /* List View Styles */
 .list-view-table {
   border-collapse: separate;

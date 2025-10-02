@@ -14,6 +14,7 @@ import {
   LucideUser,
   LucideLogOut,
   LucideChevronDown,
+  LucideX,
 } from 'lucide-react';
 import { facilityService, Facility } from '../api/facilityService';
 import { useFacility } from '../context/FacilityContext';
@@ -35,208 +36,227 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
   return (
     <>
       <div
-        className={`fixed left-0 top-0 flex flex-col transition-all duration-300 ${
+        className={`sidebar-container fixed left-0 top-0 flex flex-col transition-all duration-300 ${
           isCollapsed ? 'w-16' : 'w-64'
-        } h-screen ${
+        } h-screen rounded-r-lg ${
           isDarkMode
-            ? 'bg-neutral-dark text-white border-r border-gray-700'
+            ? 'bg-gray-900 text-white border-r border-gray-700'
             : 'bg-white text-gray-900 border-r border-gray-200'
-        }`}
+        } z-40`}
       >
-        {/* Header */}
+        {/* Brand Header */}
         <div className={`px-4 py-3 border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        } flex items-center justify-start h-14`}>
+          isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
+        } flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-14`}>
           {isCollapsed ? (
-            <img src="/images/nexora.png" alt="Nexora Logo" className="w-8 h-8 rounded-full" />
+            <button
+              onClick={onToggle}
+              className="flex items-center justify-center p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+              title="Expand sidebar"
+            >
+              <img 
+                src="/images/nexora.png" 
+                alt="Nexora Logo" 
+                className="w-6 h-6 rounded-full object-cover flex-shrink-0" 
+              />
+            </button>
           ) : (
-            <div className="flex items-center space-x-2">
-              <img src="/images/nexora.png" alt="PMSNexora Logo" className="w-8 h-8 rounded-full" />
-              <h1 className="text-lg font-semibold text-brand">Nexora</h1>
-            </div>
+            <>
+              <div className="flex items-center space-x-3 flex-1 min-w-0">
+                <img 
+                  src="/images/nexora.png" 
+                  alt="PMSNexora Logo" 
+                  className="w-6 h-6 rounded-full object-cover flex-shrink-0" 
+                />
+                <h1 className="text-lg font-semibold text-brand truncate">Nexora</h1>
+              </div>
+              
+              {/* Collapse Button */}
+              <button
+                onClick={onToggle}
+                className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${
+                  isDarkMode
+                    ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'
+                    : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                }`}
+                title="Collapse sidebar"
+              >
+                <LucideX className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 flex flex-col overflow-y-auto overflow-x-visible">
+          {/* Main Navigation - Top Priority Resources */}
+          <div className="px-3 py-2 overflow-visible">
+            <div className="flex flex-col space-y-1 overflow-visible">
+            <Tooltip content="Dashboard" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/dashboard"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideGrid className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Dashboard</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Resource Management" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/resource-mgmt"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideClipboardList className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Resource Mgmt</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Time Log" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/time-log"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideClock className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Time Log</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Notes" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/notes"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideFileText className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Notes</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Meetings" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/meetings"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideMessageSquare className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Meetings</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Users" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/users"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideUsers className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Users</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Settings" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/menu-settings"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideSettings className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Settings</span>}
+              </NavLink>
+            </Tooltip>
+            </div>
+          </div>
+
+          {/* Section Separator */}
+          <div className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
+
           {/* Facilities Section */}
-          {!isCollapsed && (
-            <div className="px-2 mb-2">
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Facilities
-              </h3>
-            </div>
-          )}
-          <CollapsibleFacilitiesList 
-            isCollapsed={isCollapsed} 
-            isDarkMode={isDarkMode} 
-          />
-
-          {/* Resources Section */}
-          <div className="mt-4">
-            {!isCollapsed && (
-              <div className="px-2 mb-2">
-                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Resources
-                </h3>
-              </div>
-            )}
-            
-            <div className="space-y-1">
-              <Tooltip content="Dashboard" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/dashboard"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideGrid className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Dashboard</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Resource Management" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/resource-mgmt"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideClipboardList className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Resource Mgmt</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Time Log" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/time-log"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideClock className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Time log</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Notes" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/notes"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideFileText className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Notes</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Meetings" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/meetings"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideMessageSquare className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Meetings</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Users" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/users"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideUsers className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Users</span>}
-                </NavLink>
-              </Tooltip>
-
-              <Tooltip content="Settings" position="right" disabled={!isCollapsed}>
-                <NavLink
-                  to="/menu-settings"
-                  className={({ isActive }) =>
-                    `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 ${
-                      isCollapsed ? 'justify-center' : ''
-                    } ${
-                      isActive
-                        ? 'bg-brand text-white'
-                        : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
-                    }`
-                  }
-                >
-                  <LucideSettings className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-                  {!isCollapsed && <span className="ml-2 text-xs">Settings</span>}
-                </NavLink>
-              </Tooltip>
-            </div>
+          <div className="px-3 py-2 overflow-visible">
+            <CollapsibleFacilitiesList 
+              isCollapsed={isCollapsed} 
+              isDarkMode={isDarkMode} 
+            />
           </div>
         </nav>
 
         {/* User Profile Section */}
         <div className={`px-4 py-3 border-t ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
         }`}>
           {!isCollapsed ? (
             <div className="relative">
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className={`w-full flex items-center space-x-3 p-2 rounded-lg transition-colors ${
+                className={`w-full flex items-center space-x-3 p-2 rounded-md transition-colors ${
                   isDarkMode
-                    ? 'hover:bg-gray-800'
+                    ? 'hover:bg-gray-700'
                     : 'hover:bg-gray-100'
                 }`}
               >
@@ -244,46 +264,46 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
                   <img
                     src={user.photoURL}
                     alt="Profile"
-                    className="w-8 h-8 rounded-full object-cover"
+                    className="w-7 h-7 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center">
-                    <LucideUser className="w-4 h-4 text-white" />
+                  <div className="w-7 h-7 rounded-full bg-brand flex items-center justify-center">
+                    <LucideUser className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
-                <div className="flex-1 text-left">
-                  <p className={`text-sm font-medium ${
+                <div className="flex-1 text-left min-w-0">
+                  <p className={`text-sm font-medium truncate ${
                     isDarkMode ? 'text-white' : 'text-gray-900'
                   }`}>
                     {user && user.displayName ? user.displayName : 'User'}
                   </p>
-                  <p className={`text-xs ${
+                  <p className={`text-xs truncate ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-500'
                   }`}>
                     {user && user.email ? user.email : 'user@example.com'}
                   </p>
                 </div>
-                <LucideChevronDown className={`w-4 h-4 transition-transform ${
+                <LucideChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${
                   isProfileOpen ? 'rotate-180' : ''
                 } ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
               </button>
 
               {/* Profile Dropdown */}
               {isProfileOpen && (
-                <div className={`absolute bottom-full left-4 right-4 mb-2 rounded-lg shadow-lg border ${
+                <div className={`absolute bottom-full left-3 right-3 mb-2 rounded-md shadow-lg border ${
                   isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                 }`}>
                   <div className="py-1">
                     <button className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
                       isDarkMode ? 'text-gray-300' : 'text-gray-700'
                     }`}>
-                      <LucideUser className="w-4 h-4 inline mr-2" />
+                      <LucideUser className="w-3.5 h-3.5 inline mr-2" />
                       Profile Settings
                     </button>
                     <button className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
                       isDarkMode ? 'text-gray-300' : 'text-gray-700'
                     }`}>
-                      <LucideHelpCircle className="w-4 h-4 inline mr-2" />
+                      <LucideHelpCircle className="w-3.5 h-3.5 inline mr-2" />
                       Help & Support
                     </button>
                     <hr className={`my-1 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`} />
@@ -291,7 +311,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
                       onClick={logout}
                       className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-red-600 dark:text-red-400`}
                     >
-                      <LucideLogOut className="w-4 h-4 inline mr-2" />
+                      <LucideLogOut className="w-3.5 h-3.5 inline mr-2" />
                       Sign Out
                     </button>
                   </div>
@@ -304,11 +324,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
                 <img
                   src={user.photoURL}
                   alt="Profile"
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-7 h-7 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center">
-                  <LucideUser className="w-4 h-4 text-white" />
+                <div className="w-7 h-7 rounded-full bg-brand flex items-center justify-center">
+                  <LucideUser className="w-3.5 h-3.5 text-white" />
                 </div>
               )}
             </div>
@@ -318,7 +338,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
         <div className="px-4 py-2">
           {!isCollapsed && (
             <p className={`text-xs ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              isDarkMode ? 'text-gray-500' : 'text-gray-500'
             }`}>
               &copy; 2024 PMSNexora. All rights reserved.
             </p>

@@ -40,9 +40,11 @@ interface KanbanBoardProps {
   handleArchiveProject: (projectId: string, projectName: string) => void;
   handleDeleteProject: (projectId: string, projectName: string) => void;
   handleUpdateProjectName: (projectId: string, name: string) => void;
+  handleUpdateProjectStatus: (projectId: string, status: string) => void;
   handleOpenTaskDetail: (taskId: string) => void;
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
   facilityId?: string;
+  selectedProjectId?: string | null;
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -80,8 +82,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   handleArchiveProject,
   handleDeleteProject,
   handleUpdateProjectName,
+  handleUpdateProjectStatus,
   onTaskMove,
   facilityId,
+  selectedProjectId,
 }) => {
   const [activeTask, setActiveTask] = React.useState<any>(null);
 
@@ -156,9 +160,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           handleArchiveProject={handleArchiveProject}
           handleDeleteProject={handleDeleteProject}
           handleUpdateProjectName={handleUpdateProjectName}
+          handleUpdateProjectStatus={handleUpdateProjectStatus}
           handleOpenTaskDetail={handleOpenTaskDetail}
           onTaskMove={onTaskMove}
           facilityId={facilityId}
+          selectedProjectId={selectedProjectId}
         />
           ))}
 
@@ -222,15 +228,23 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 <div className="flex items-center">
                   {(activeTask.assignees && activeTask.assignees.length > 0) || activeTask.assignee ? (
                     <div className="flex items-center">
-                      {(activeTask.assignees || [activeTask.assignee]).slice(0, 3).map((assignee, index) => (
-                        <div 
-                          key={index}
-                          className="w-6 h-6 rounded-full overflow-hidden bg-green-500 text-white flex items-center justify-center text-xs font-medium border-2 border-white dark:border-gray-800"
-                          style={{ marginLeft: index > 0 ? '-8px' : '0', zIndex: 3 - index }}
-                        >
-                          {assignee?.charAt(0).toUpperCase() || '?'}
-                        </div>
-                      ))}
+                      {(activeTask.assignees || [activeTask.assignee]).slice(0, 3).map((assignee, index) => {
+                        // Handle both string (ID) and object (with name) assignee formats
+                        const displayName = typeof assignee === 'string' 
+                          ? assignee 
+                          : assignee?.name || assignee?.id || '';
+                        const initial = displayName?.charAt?.(0)?.toUpperCase() || '?';
+                        
+                        return (
+                          <div 
+                            key={index}
+                            className="w-6 h-6 rounded-full overflow-hidden bg-green-500 text-white flex items-center justify-center text-xs font-medium border-2 border-white dark:border-gray-800"
+                            style={{ marginLeft: index > 0 ? '-8px' : '0', zIndex: 3 - index }}
+                          >
+                            {initial}
+                          </div>
+                        );
+                      })}
                       {(activeTask.assignees?.length || (activeTask.assignee ? 1 : 0)) > 3 && (
                         <div 
                           className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium bg-gray-500 text-white border-2 border-white dark:border-gray-800"

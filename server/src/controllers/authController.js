@@ -271,20 +271,14 @@ exports.getUserProfiles = async (req, res) => {
       return res.status(400).json({ message: 'userIds must be a non-empty array' });
     }
 
-    const profiles = {};
-    for (const userId of userIds) {
-      const user = await User.findById(userId);
-      if (user) {
-        const profile = await User.getProfile(user.id);
-        profiles[userId] = profile || { firstName: 'Unknown', lastName: '', profilePicture: null };
-      } else {
-        profiles[userId] = { firstName: 'Unknown', lastName: '', profilePicture: null };
-      }
-    }
-
+    // Use the new Firestore-based method
+    const profiles = await User.getProfilesByIds(userIds);
     res.json(profiles);
   } catch (error) {
     console.error('Get user profiles error:', error);
-    res.status(500).json({ message: 'Server error fetching user profiles' });
+    res.status(500).json({ 
+      message: 'Server error fetching user profiles',
+      error: error.message 
+    });
   }
 };

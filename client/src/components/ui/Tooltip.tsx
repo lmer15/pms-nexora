@@ -91,7 +91,7 @@ const Tooltip: React.FC<TooltipProps> = ({
       {isVisible && (
         <div
           ref={tooltipRef}
-          className={`absolute z-50 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded shadow-lg whitespace-nowrap transition-opacity duration-200 ${getPositionClasses()}`}
+          className={`absolute z-[60] px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded shadow-lg whitespace-nowrap transition-opacity duration-200 ${getPositionClasses()}`}
           role="tooltip"
         >
           {content}

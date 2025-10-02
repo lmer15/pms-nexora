@@ -4,6 +4,7 @@ import { LucideBuilding, LucideChevronDown, LucideChevronRight, LucidePlus, Luci
 import { facilityService, Facility } from '../api/facilityService';
 import { useFacility } from '../context/FacilityContext';
 import CreateFacilityModal from './CreateFacilityModal';
+import Tooltip from './ui/Tooltip';
 
 interface CollapsibleFacilitiesListProps {
   isCollapsed: boolean;
@@ -69,15 +70,18 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
   };
 
   const getStatusIcon = (status: string) => {
+    const iconSize = isCollapsed ? 'w-5 h-5' : 'w-3 h-3';
+    const buildingIconSize = isCollapsed ? 'w-5 h-5' : 'w-4 h-4';
+    
     switch (status) {
       case 'overdue':
-        return <LucideAlertCircle className="w-3 h-3 text-red-500" />;
+        return <LucideAlertCircle className={`${iconSize} text-red-500`} />;
       case 'active':
-        return <LucideCheckCircle className="w-3 h-3 text-green-500" />;
+        return <LucideCheckCircle className={`${iconSize} text-green-500`} />;
       case 'empty':
-        return <LucideClock className="w-3 h-3 text-gray-400" />;
+        return <LucideClock className={`${iconSize} text-gray-400`} />;
       default:
-        return <LucideBuilding className="w-4 h-4" />;
+        return <LucideBuilding className={`${buildingIconSize}`} />;
     }
   };
 
@@ -90,6 +94,8 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
         to={`/facility/${facility.id}`}
         className={({ isActive: navIsActive }) =>
           `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 group ${
+            isCollapsed ? 'justify-center' : ''
+          } ${
             navIsActive || isActive
               ? 'bg-brand text-white'
               : isDarkMode
@@ -97,19 +103,28 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
               : 'text-gray-600 hover:bg-gray-100 hover:text-brand'
           }`
         }
+        title={isCollapsed ? facility.name : undefined}
       >
-        <div className="flex items-center flex-1 min-w-0">
-          {getStatusIcon(status)}
-          <span className="ml-2 text-xs truncate font-medium">{facility.name}</span>
-        </div>
-        {showBadge && badge && (
-          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full flex-shrink-0 ${
-            status === 'overdue'
-              ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-          }`}>
-            {badge}
-          </span>
+        {isCollapsed ? (
+          <div className="flex items-center justify-center">
+            {getStatusIcon(status)}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center flex-1 min-w-0">
+              {getStatusIcon(status)}
+              <span className="ml-2 text-xs truncate font-medium">{facility.name}</span>
+            </div>
+            {showBadge && badge && (
+              <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full flex-shrink-0 ${
+                status === 'overdue'
+                  ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {badge}
+              </span>
+            )}
+          </>
         )}
       </NavLink>
     );
@@ -146,6 +161,43 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
               )}
             </div>
           </button>
+        )}
+
+        {/* Search Bar with Add Button */}
+        {(!isCollapsed && isExpanded) && (
+          <div className="px-2 mb-2">
+            <div className="flex items-center space-x-2">
+              <div className="relative flex-1">
+                <LucideSearch className="w-3 h-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search facilities..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full pl-7 pr-2 py-1.5 text-xs border-0 rounded-md ${
+                    isDarkMode 
+                      ? 'bg-gray-700 text-white placeholder-gray-400' 
+                      : 'bg-gray-100 text-gray-900 placeholder-gray-500'
+                  } focus:outline-none focus:ring-1 focus:ring-brand`}
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <LucideX className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                title="Add Facility"
+              >
+                <LucidePlus className="w-4 h-4 text-brand" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Section Content */}
@@ -186,17 +238,6 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
           </div>
         )}
 
-        {/* Collapsed view - show only first few facilities */}
-        {isCollapsed && (
-          <div className="space-y-0.5">
-            {filtered.slice(0, 3).map(facility => renderFacilityItem(facility, false, false))}
-            {filtered.length > 3 && (
-              <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 text-center">
-                +{filtered.length - 3} more
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   };
@@ -204,42 +245,6 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
   return (
     <>
       <div className="mb-3">
-        {/* Search Bar with Add Button */}
-        {!isCollapsed && (
-          <div className="px-2 mb-2">
-            <div className="flex items-center space-x-2">
-              <div className="relative flex-1">
-                <LucideSearch className="w-3 h-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search facilities..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-7 pr-2 py-1.5 text-xs border-0 rounded-md ${
-                    isDarkMode 
-                      ? 'bg-gray-700 text-white placeholder-gray-400' 
-                      : 'bg-gray-100 text-gray-900 placeholder-gray-500'
-                  } focus:outline-none focus:ring-1 focus:ring-brand`}
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <LucideX className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-                title="Add Facility"
-              >
-                <LucidePlus className="w-4 h-4 text-brand" />
-              </button>
-            </div>
-          </div>
-        )}
 
 
         {/* Collapsed Facilities Link */}
@@ -247,7 +252,7 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
           <NavLink
             to="/Facilities"
             className={({ isActive }) =>
-              `flex items-center px-2 py-1 rounded-md transition-colors duration-200 justify-center ${
+              `flex items-center px-2 py-1.5 rounded-md transition-colors duration-200 justify-center ${
                 isActive
                   ? 'bg-brand text-white'
                   : isDarkMode
@@ -257,7 +262,12 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
             }
             title="Facilities"
           >
-            <LucideBuilding className="w-6 h-6 flex-shrink-0" />
+            <LucideBuilding className="w-5 h-5 flex-shrink-0" />
+            {facilities.length > 0 && (
+              <span className="ml-1 text-xs font-medium">
+                {facilities.length}
+              </span>
+            )}
           </NavLink>
         )}
 

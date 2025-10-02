@@ -55,6 +55,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setToken(response.token);
           // Store token in localStorage for API interceptor
           storage.setToken(response.token);
+          
+          // Dispatch custom event to trigger user profile refresh
+          const userProfileUpdatedEvent = new CustomEvent('userProfileUpdated', {
+            detail: { userId: user.uid, user: response.user }
+          });
+          window.dispatchEvent(userProfileUpdatedEvent);
         } catch (error) {
           console.error('Failed to sync user with backend:', error);
           // If sync fails, logout to prevent loop

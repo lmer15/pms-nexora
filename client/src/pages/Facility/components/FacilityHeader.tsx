@@ -14,9 +14,6 @@ import {
   LucideList,
   LucideCalendar as CalendarIcon,
   LucideChevronDown,
-  LucideUser,
-  LucideFlag,
-  LucideTag,
 } from 'lucide-react';
 import { Facility } from '../types';
 import { facilityService, FacilityMember } from '../../../api/facilityService';
@@ -40,15 +37,6 @@ interface FacilityHeaderProps {
   currentView?: 'kanban' | 'list' | 'calendar' | 'timeline';
   onViewChange?: (view: 'kanban' | 'list' | 'calendar' | 'timeline') => void;
   onInviteMember?: () => void;
-  // Additional filters
-  assigneeFilter?: string;
-  setAssigneeFilter?: (assignee: string) => void;
-  tagFilter?: string;
-  setTagFilter?: (tag: string) => void;
-  priorityFilter?: string;
-  setPriorityFilter?: (priority: string) => void;
-  availableAssignees?: Array<{id: string, name: string}>;
-  availableTags?: Array<{id: string, name: string, color: string}>;
 }
 
 const FacilityHeader: React.FC<FacilityHeaderProps> = ({
@@ -67,24 +55,11 @@ const FacilityHeader: React.FC<FacilityHeaderProps> = ({
   currentView = 'kanban',
   onViewChange,
   onInviteMember,
-  assigneeFilter = 'all',
-  setAssigneeFilter,
-  tagFilter = 'all',
-  setTagFilter,
-  priorityFilter = 'all',
-  setPriorityFilter,
-  availableAssignees = [],
-  availableTags = [],
 }) => {
   const { memberRefreshTriggers } = useFacilityRefresh();
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [members, setMembers] = useState<FacilityMember[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
-  const [isPriorityDropdownOpen, setIsPriorityDropdownOpen] = useState(false);
-  const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
-  const [facilityTags, setFacilityTags] = useState<string[]>([]);
-  const [isLoadingTags, setIsLoadingTags] = useState(false);
   const [facilityStats, setFacilityStats] = useState({
     openTaskCount: 0,
     completionPercentage: 0,
@@ -123,39 +98,6 @@ const FacilityHeader: React.FC<FacilityHeaderProps> = ({
     });
   }, [totalTasks, completedTasks, completionPercentage]);
 
-  // Fetch facility tags
-  useEffect(() => {
-    const fetchFacilityTags = async () => {
-      if (!facility?.id) return;
-      setIsLoadingTags(true);
-      try {
-        const tagsData = await facilityService.getFacilityTags(facility.id);
-        setFacilityTags(tagsData);
-      } catch (error) {
-        console.error('Failed to fetch facility tags:', error);
-        setFacilityTags([]);
-      } finally {
-        setIsLoadingTags(false);
-      }
-    };
-
-    fetchFacilityTags();
-  }, [facility?.id]);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.filter-dropdown')) {
-        setIsAssigneeDropdownOpen(false);
-        setIsPriorityDropdownOpen(false);
-        setIsTagDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   return (
     <div className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`} style={{ margin: 0, padding: 0, width: '100%' }}>
@@ -309,161 +251,6 @@ const FacilityHeader: React.FC<FacilityHeaderProps> = ({
             ))}
           </div>
             
-          {/* Advanced Filter Dropdowns */}
-          <div className="flex items-center space-x-1 ml-2">
-            {/* Assignee Filter */}
-            <div className="relative filter-dropdown">
-              <button
-                onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
-                className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                  assigneeFilter !== 'all'
-                    ? 'bg-brand text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                <LucideUser className="w-3 h-3" />
-                <span>Assignee</span>
-                <LucideChevronDown className="w-3 h-3" />
-              </button>
-              {isAssigneeDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        setAssigneeFilter?.('all');
-                        setIsAssigneeDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                        assigneeFilter === 'all' ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
-                      }`}
-                    >
-                      All Assignees
-                    </button>
-                    {availableAssignees.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                        No assignees found
-                      </div>
-                    ) : (
-                      availableAssignees.map((assignee) => (
-                      <button
-                        key={assignee.id}
-                        onClick={() => {
-                          setAssigneeFilter?.(assignee.name);
-                          setIsAssigneeDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                          assigneeFilter === assignee.name ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <div
-                            className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                            style={{ backgroundColor: '#6B7280' }}
-                          >
-                            {assignee.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span>{assignee.name}</span>
-                        </div>
-                      </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Priority Filter */}
-            <div className="relative filter-dropdown">
-              <button
-                onClick={() => setIsPriorityDropdownOpen(!isPriorityDropdownOpen)}
-                className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                  priorityFilter !== 'all'
-                    ? 'bg-brand text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                <LucideFlag className="w-3 h-3" />
-                <span>Priority</span>
-                <LucideChevronDown className="w-3 h-3" />
-              </button>
-              {isPriorityDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
-                  <div className="py-1">
-                    {['all', 'high', 'medium', 'low'].map((priority) => (
-                      <button
-                        key={priority}
-                        onClick={() => {
-                          setPriorityFilter?.(priority);
-                          setIsPriorityDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                          priorityFilter === priority ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
-                        }`}
-                      >
-                        {priority === 'all' ? 'All Priorities' : priority.charAt(0).toUpperCase() + priority.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Tag Filter */}
-            <div className="relative filter-dropdown">
-              <button
-                onClick={() => setIsTagDropdownOpen(!isTagDropdownOpen)}
-                className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                  tagFilter !== 'all'
-                    ? 'bg-brand text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                <LucideTag className="w-3 h-3" />
-                <span>Tags</span>
-                <LucideChevronDown className="w-3 h-3" />
-              </button>
-              {isTagDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        setTagFilter?.('all');
-                        setIsTagDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                        tagFilter === 'all' ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
-                      }`}
-                    >
-                      All Tags
-                    </button>
-                    {isLoadingTags ? (
-                      <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                        Loading tags...
-                      </div>
-                    ) : (
-                      facilityTags.map((tag) => (
-                        <button
-                          key={tag}
-                          onClick={() => {
-                            setTagFilter?.(tag);
-                            setIsTagDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                            tagFilter === tag ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-brand"></div>
-                            <span>{tag}</span>
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Right: View Controls */}

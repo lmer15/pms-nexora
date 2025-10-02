@@ -129,6 +129,7 @@ export const useOptimizedProjectManagement = (
       // Use the optimized endpoint to get all data in one request
       const data = await facilityService.getWithData(facilityId, true);
       
+      
       setProjects(data.projects);
       
       // Convert projects to columns format
@@ -139,7 +140,10 @@ export const useOptimizedProjectManagement = (
           ...task,
           creatorId: (task as any).creatorId || task.assigneeId || '', // Add missing creatorId field
           status: task.status as 'todo' | 'in-progress' | 'review' | 'done', // Cast status to correct type
-          priority: task.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined // Cast priority to correct type
+          priority: task.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined, // Cast priority to correct type
+          // Preserve assignee information for avatar display
+          assigneeName: (task as any).assigneeName,
+          assigneeProfilePicture: (task as any).assigneeProfilePicture
         }))
       }));
       
@@ -170,7 +174,12 @@ export const useOptimizedProjectManagement = (
         return {
           id: project.id,
           title: project.name,
-          tasks: tasks,
+          tasks: tasks.map(task => ({
+            ...task,
+            // Ensure assignee information is preserved
+            assigneeName: (task as any).assigneeName,
+            assigneeProfilePicture: (task as any).assigneeProfilePicture
+          })),
         };
       } catch (error) {
         console.error('Error loading tasks for project:', project.id, error);

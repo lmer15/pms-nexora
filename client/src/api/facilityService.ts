@@ -129,6 +129,8 @@ export const facilityService = {
         status: string;
         priority: string;
         assigneeId?: string;
+        assigneeName?: string;
+        assigneeProfilePicture?: string;
         projectId: string;
         dueDate?: string;
         tags: string[];

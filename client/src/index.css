@@ -357,6 +357,20 @@ button.bg-brand:hover {
   --brand-dark: #059669;
 }
 
+/* Sidebar tooltip overflow fix */
+.sidebar-container {
+  overflow: visible !important;
+}
+
+/* Only apply overflow visible to specific elements that need tooltips, not media elements */
+.sidebar-container nav,
+.sidebar-container div,
+.sidebar-container a,
+.sidebar-container button,
+.sidebar-container span {
+  overflow: visible !important;
+}
+
 /* Facility view specific - disable scroll */
 .facility-view-no-scroll {
   overflow: hidden !important;

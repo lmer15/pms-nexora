@@ -214,19 +214,19 @@ const KanbanMiniMap: React.FC<KanbanMiniMapProps> = ({
           <div className="flex items-center space-x-3 text-xs">
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
-              <span>High Priority</span>
+              <span className="text-gray-700 dark:text-gray-300">High Priority</span>
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-yellow-500 rounded-sm"></div>
-              <span>Medium</span>
+              <span className="text-gray-700 dark:text-gray-300">Medium</span>
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
-              <span>Low Priority</span>
+              <span className="text-gray-700 dark:text-gray-300">Low Priority</span>
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-gray-400 rounded-sm"></div>
-              <span>Default</span>
+              <span className="text-gray-700 dark:text-gray-300">Default</span>
             </div>
           </div>
         </div>

@@ -70,32 +70,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       <header className={`fixed top-0 ${isSidebarCollapsed ? 'left-16' : 'left-64'} right-0 z-30 shadow-sm border-b h-14 flex items-center justify-between px-6 ${
         isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
       }`} style={{ margin: 0 }}>
-        {/* Collapse Arrow */}
-        <button
-          onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
-          className={`absolute top-3 left-0 z-40 p-1 rounded-r-md transition-colors duration-300 ${
-            isDarkMode
-              ? 'bg-gray-800 hover:bg-gray-700 text-brand-light border border-gray-700'
-              : 'bg-white hover:bg-gray-50 text-brand border border-gray-200'
-          } flex items-center justify-center shadow-sm`}
-          style={{ width: '32px', height: '32px' }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d={isSidebarCollapsed ? "M15 19l-7-7 7-7" : "M9 5l7 7-7 7"}
-            />
-          </svg>
-        </button>
 
         <div className="flex items-center space-x-5">
           <div className="flex items-center space-x-3">

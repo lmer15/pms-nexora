@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Column, Task } from '../types';
 
 interface CalendarViewProps {
@@ -27,11 +27,50 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [colorBy, setColorBy] = useState<'status' | 'project' | 'priority'>('status');
+  const [localColumns, setLocalColumns] = useState<Column[]>(columns);
+
+  // Sync local columns with props
+  useEffect(() => {
+    setLocalColumns(columns);
+  }, [columns]);
+
+  // Listen for task updates to refresh task information
+  useEffect(() => {
+    const handleTaskUpdated = (event: CustomEvent) => {
+      const updatedTask = event.detail;
+      setLocalColumns(prevColumns =>
+        prevColumns.map(column => ({
+          ...column,
+          tasks: column.tasks.map(task =>
+            task.id === updatedTask.id ? updatedTask : task
+          )
+        }))
+      );
+    };
+
+    const handleTaskDeleted = (event: CustomEvent) => {
+      const { taskId } = event.detail;
+      setLocalColumns(prevColumns =>
+        prevColumns.map(column => ({
+          ...column,
+          tasks: column.tasks.filter(task => task.id !== taskId)
+        }))
+      );
+    };
+
+    window.addEventListener('taskUpdated', handleTaskUpdated as EventListener);
+    window.addEventListener('taskDeleted', handleTaskDeleted as EventListener);
+
+    return () => {
+      window.removeEventListener('taskUpdated', handleTaskUpdated as EventListener);
+      window.removeEventListener('taskDeleted', handleTaskDeleted as EventListener);
+    };
+  }, []);
 
   // Flatten all tasks with project information
   const allTasks = useMemo(() => {
     const tasks: CalendarTask[] = [];
-    columns.forEach(column => {
+    localColumns.forEach(column => {
       column.tasks.forEach(task => {
         tasks.push({
           ...task,
@@ -41,7 +80,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       });
     });
     return tasks;
-  }, [columns]);
+  }, [localColumns]);
 
   // Get tasks for a specific date
   const getTasksForDate = (date: Date) => {
@@ -211,7 +250,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="space-y-1">
                 {tasks.slice(0, 3).map(task => (
                   <div
-                    key={task.id}
+                    key={`${task.id}-${(task as any)._clientUpdatedAt || task.updatedAt || task.createdAt}`}
                     onClick={() => onTaskClick(task.id)}
                     className={`calendar-task text-xs p-1 rounded cursor-pointer text-white truncate ${getTaskColor(task)} hover:opacity-80`}
                     title={task.title}
@@ -268,7 +307,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <div className="space-y-2">
                   {dayTasks.map(task => (
                     <div
-                      key={task.id}
+                      key={`${task.id}-${(task as any)._clientUpdatedAt || task.updatedAt || task.createdAt}`}
                       onClick={() => onTaskClick(task.id)}
                       className={`p-2 rounded cursor-pointer text-white text-sm ${getTaskColor(task)} hover:opacity-80`}
                     >
@@ -307,7 +346,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           ) : (
             tasks.map(task => (
               <div
-                key={task.id}
+                key={`${task.id}-${task.updatedAt || task.createdAt}`}
                 onClick={() => onTaskClick(task.id)}
                 className={`p-4 rounded-lg cursor-pointer text-white ${getTaskColor(task)} hover:opacity-80 transition-opacity`}
               >
@@ -336,7 +375,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+    <div className={`h-full flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Header */}
       <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
         <div className="flex items-center justify-between mb-4">

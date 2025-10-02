@@ -2,13 +2,39 @@ import axios from 'axios';
 import api from './api';
 import cacheService from '../services/cacheService';
 
+// Cache for task details to prevent duplicate requests
+const taskDetailsCache = new Map<string, Promise<TaskDetails> | TaskDetails>();
+
+// Helper function to handle rate limiting with exponential backoff
+const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> => {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (error.response?.status === 429 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.warn(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+};
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
   status: 'todo' | 'in-progress' | 'review' | 'done';
   assignee?: string; // Keep for backward compatibility
-  assignees?: string[]; // New field for multiple assignees
+  assigneeName?: string; // Display name from server
+  assigneeIds?: string[]; // Multiple assignee IDs
   dueDate?: string;
   projectId: string;
   creatorId: string;
@@ -28,6 +54,7 @@ export interface CreateTaskData {
   description?: string;
   status?: 'todo' | 'in-progress' | 'review' | 'done';
   assignee?: string; // Keep for backward compatibility
+  assigneeName?: string; // Display name from server
   assignees?: string[]; // New field for multiple assignees
   dueDate?: string;
   projectId: string;
@@ -194,12 +221,20 @@ const taskService = {
     // Invalidate cache for this project
     cacheService.invalidateTask(task.projectId);
     
+    // Clear task details cache for this specific task
+    taskService.clearTaskDetailsCache(id);
+    
     return task;
   },
 
   pin: async (id: string, pinned: boolean): Promise<Task> => {
     const response = await api.put(`/tasks/${id}/pin`, { pinned });
-    return response.data;
+    const task = response.data;
+    
+    // Clear task details cache for this specific task
+    taskService.clearTaskDetailsCache(id);
+    
+    return task;
   },
 
   delete: async (id: string): Promise<void> => {
@@ -213,29 +248,71 @@ const taskService = {
       cacheService.invalidateTask(task.projectId);
       cacheService.invalidateProject(task.projectId);
     }
+    
+    // Clear task details cache for this specific task
+    taskService.clearTaskDetailsCache(id);
   },
 
   // Task Details methods
-  getTaskDetails: async (taskId: string): Promise<TaskDetails> => {
-    const [task, comments, attachments, dependencies, subtasks, timeLogs, activityLogs] = await Promise.all([
-      api.get(`/tasks/${taskId}`),
-      api.get(`/tasks/${taskId}/comments`),
-      api.get(`/tasks/${taskId}/attachments`),
-      api.get(`/tasks/${taskId}/dependencies`),
-      api.get(`/tasks/${taskId}/subtasks`),
-      api.get(`/tasks/${taskId}/timeLogs`),
-      api.get(`/tasks/${taskId}/activityLogs`),
-    ]);
+  clearTaskDetailsCache: (taskId?: string) => {
+    if (taskId) {
+      taskDetailsCache.delete(`taskDetails_${taskId}`);
+    } else {
+      taskDetailsCache.clear();
+    }
+  },
 
-    return {
-      task: task.data,
-      comments: comments.data,
-      attachments: attachments.data,
-      dependencies: dependencies.data,
-      subtasks: subtasks.data,
-      timeLogs: timeLogs.data,
-      activityLogs: activityLogs.data,
-    };
+  getTaskDetails: async (taskId: string): Promise<TaskDetails> => {
+    // Check if we already have a pending request for this task (only for concurrent requests)
+    const cacheKey = `taskDetails_${taskId}`;
+    const cached = taskDetailsCache.get(cacheKey);
+    
+    // If it's a promise (pending request), return it
+    if (cached && typeof (cached as any).then === 'function') {
+      return cached as Promise<TaskDetails>;
+    }
+
+    // Create a promise for this request
+    const requestPromise = (async () => {
+      try {
+        const result = await retryWithBackoff(async () => {
+          const [task, comments, attachments, dependencies, subtasks, timeLogs, activityLogs] = await Promise.all([
+            api.get(`/tasks/${taskId}`),
+            api.get(`/tasks/${taskId}/comments`),
+            api.get(`/tasks/${taskId}/attachments`),
+            api.get(`/tasks/${taskId}/dependencies`),
+            api.get(`/tasks/${taskId}/subtasks`),
+            api.get(`/tasks/${taskId}/timeLogs`),
+            api.get(`/tasks/${taskId}/activityLogs`),
+          ]);
+
+          return {
+            task: task.data,
+            comments: comments.data,
+            attachments: attachments.data,
+            dependencies: dependencies.data,
+            subtasks: subtasks.data,
+            timeLogs: timeLogs.data,
+            activityLogs: activityLogs.data,
+          };
+        });
+
+        // Cache the result for only 5 seconds to prevent stale data
+        taskDetailsCache.set(cacheKey, result);
+        setTimeout(() => taskDetailsCache.delete(cacheKey), 5000);
+
+        return result;
+      } catch (error) {
+        // Remove from cache on error
+        taskDetailsCache.delete(cacheKey);
+        throw error;
+      }
+    })();
+
+    // Store the promise in cache to prevent duplicate concurrent requests
+    taskDetailsCache.set(cacheKey, requestPromise);
+    
+    return requestPromise;
   },
 
   // Comments
@@ -250,6 +327,10 @@ const taskService = {
     formatting?: { bold?: boolean; italic?: boolean; underline?: boolean; }
   }): Promise<TaskComment> => {
     const response = await api.post(`/tasks/${taskId}/comments`, commentData);
+    
+    // Clear task details cache to ensure fresh data
+    taskService.clearTaskDetailsCache(taskId);
+    
     return response.data;
   },
 
@@ -258,11 +339,18 @@ const taskService = {
     formatting?: { bold?: boolean; italic?: boolean; underline?: boolean; }
   }): Promise<TaskComment> => {
     const response = await api.put(`/tasks/${taskId}/comments/${commentId}`, commentData);
+    
+    // Clear task details cache to ensure fresh data
+    taskService.clearTaskDetailsCache(taskId);
+    
     return response.data;
   },
 
   deleteComment: async (taskId: string, commentId: string): Promise<void> => {
     await api.delete(`/tasks/${taskId}/comments/${commentId}`);
+    
+    // Clear task details cache to ensure fresh data
+    taskService.clearTaskDetailsCache(taskId);
   },
 
   likeComment: async (taskId: string, commentId: string): Promise<{ likes: string[]; dislikes: string[] }> => {
@@ -378,6 +466,12 @@ const taskService = {
   fetchUserProfilesByIds: async (userIds: string[]): Promise<Record<string, { firstName: string; lastName: string; profilePicture?: string }>> => {
     if (userIds.length === 0) return {};
     const response = await api.post('/auth/users/profiles', { userIds });
+    return response.data;
+  },
+
+  // Bulk update task statuses
+  bulkUpdateStatus: async (taskIds: string[], status: 'todo' | 'in-progress' | 'review' | 'done'): Promise<{ message: string; updatedCount: number; status: string }> => {
+    const response = await api.put('/tasks/bulk/status', { taskIds, status });
     return response.data;
   },
 };

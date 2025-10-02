@@ -7,9 +7,10 @@ import { useFacilityRefresh } from '../../context/FacilityRefreshContext';
 import Notification from '../../components/Notification';
 import DeleteConfirmationModal from '../../components/DeleteProjectModal';
 import ArchiveConfirmationModal from '../../components/ArchiveProjectModal';
-import TaskDetailDrawer from '../../components/TaskDetailDrawer';
+import TaskDetailModal from '../../components/TaskDetailModal';
 import SlimFacilityHeader from './components/SlimFacilityHeader';
 import CommandPalette from '../../components/CommandPalette';
+import FloatingViewNavigation from '../../components/FloatingViewNavigation';
 import KanbanBoard from './components/KanbanBoard';
 import ListView from './components/ListView';
 import CalendarView from './components/CalendarView';
@@ -17,6 +18,7 @@ import TimelineView from './components/TimelineView';
 import { useOptimizedProjectManagement } from '../../hooks/useOptimizedProjectManagement';
 import { useTaskManagement } from '../../hooks/useTaskManagement';
 import { taskService } from '../../api/taskService';
+import { projectService } from '../../api/projectService';
 import cacheService from '../../services/cacheService';
 import { Column, Task } from './types';
 import './components/Views.css';
@@ -43,12 +45,13 @@ const FacilityView: React.FC = () => {
   const [showProjectArchiveNotification, setShowProjectArchiveNotification] = useState(false);
   const [showProjectCreateNotification, setShowProjectCreateNotification] = useState(false);
   const [openTaskDropdownId, setOpenTaskDropdownId] = useState<string | null>(null);
-  const [isTaskDetailDrawerOpen, setIsTaskDetailDrawerOpen] = useState(false);
+  const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
+  
   const [tagFilter, setTagFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -57,10 +60,36 @@ const FacilityView: React.FC = () => {
 
   const handleOpenTaskDetail = (taskId: string) => {
     setSelectedTaskId(taskId);
-    setIsTaskDetailDrawerOpen(true);
+    setIsTaskDetailModalOpen(true);
   };
 
-  // Wrapper function to show confirmation modal before deleting task
+  // Handle project status update
+  const handleUpdateProjectStatus = async (projectId: string, newStatus: string) => {
+    try {
+      await projectService.update(projectId, { status: newStatus as any });
+    
+      if (newStatus === 'completed') {
+        const projectTasks = columns
+          .find(col => col.id === projectId)?.tasks || [];
+        
+        const taskIdsToUpdate = projectTasks
+          .filter(task => task.status !== 'done')
+          .map(task => task.id);
+        
+        if (taskIdsToUpdate.length > 0) {
+          await taskService.bulkUpdateStatus(taskIdsToUpdate, 'done');
+        }
+      }
+      
+      // Refresh the data
+      await loadFacilityData();
+      
+    } catch (error) {
+      console.error('Error updating project status:', error);
+      setError('Failed to update project status');
+    }
+  };
+
   const handleTaskDeleteClick = (taskId: string, taskTitle: string, columnId: string) => {
     setItemToDelete({ id: taskId, name: taskTitle, type: 'task', columnId });
     setIsDeleteModalOpen(true);
@@ -68,9 +97,7 @@ const FacilityView: React.FC = () => {
 
 
   const handleTaskMove = async (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => {
-    console.log('handleTaskMove called:', { taskId, fromColumnId, toColumnId, newIndex });
     
-    // Update the local state immediately for better UX (optimistic update)
     setColumns(prevColumns => {
       const newColumns = [...prevColumns];
       
@@ -78,58 +105,38 @@ const FacilityView: React.FC = () => {
       const sourceColumnIndex = newColumns.findIndex(col => col.id === fromColumnId);
       const targetColumnIndex = newColumns.findIndex(col => col.id === toColumnId);
       
-      console.log('Column indices:', { sourceColumnIndex, targetColumnIndex });
       
       if (sourceColumnIndex === -1 || targetColumnIndex === -1) {
-        console.log('Column not found, returning previous columns');
         return prevColumns;
       }
-      
-      // Find the task in the source column
+
       const sourceColumn = newColumns[sourceColumnIndex];
       const taskIndex = sourceColumn.tasks.findIndex(task => task.id === taskId);
       
-      console.log('Task index in source column:', taskIndex);
       
       if (taskIndex === -1) {
-        console.log('Task not found in source column');
         return prevColumns;
       }
-      
-      // Remove task from source column
+
       const [movedTask] = sourceColumn.tasks.splice(taskIndex, 1);
-      
-      // Update the task's projectId
+
       const updatedTask = { ...movedTask, projectId: toColumnId };
-      
-      // Add task to target column at the specified index
       const targetColumn = newColumns[targetColumnIndex];
       targetColumn.tasks.splice(newIndex, 0, updatedTask);
       
-      console.log('Task moved locally, updating backend...');
       return newColumns;
     });
-
-    // Update the task's projectId in the backend
     try {
-      console.log('Calling taskService.update with:', { taskId, projectId: toColumnId });
       const updatedTask = await taskService.update(taskId, { projectId: toColumnId });
-      console.log('Backend update successful:', updatedTask);
-      
-      // Manually invalidate cache for both source and target projects
-      // This ensures fresh data is loaded when returning to the facility view
+
       cacheService.invalidateProject(fromColumnId);
       cacheService.invalidateProject(toColumnId);
-      console.log('Cache invalidated for both projects:', { fromColumnId, toColumnId });
       
-      // Show success notification
       setShowTaskMoveNotification(true);
     } catch (error) {
       console.error('Failed to move task:', error);
       console.error('Error details:', error.response?.data || error.message);
-      // Revert the local state change on error
       setColumns(prevColumns => {
-        // Reload columns from server to get the correct state
         loadColumnsForProject(projects);
         return prevColumns;
       });
@@ -271,24 +278,46 @@ const FacilityView: React.FC = () => {
     handleDeleteTask: originalHandleDeleteTask,
   } = useTaskManagement(columns, setColumns, () => setShowNotification(true));
 
-  // Enhanced task deletion with fallback refresh
+  // Auto-update project status based on task completion
+  useEffect(() => {
+    const updateProjectStatuses = async () => {
+      for (const column of columns) {
+        const projectTasks = column.tasks;
+        if (projectTasks.length === 0) continue;
+
+        const completedTasks = projectTasks.filter(task => task.status === 'done').length;
+        const totalTasks = projectTasks.length;
+        
+        let newStatus = 'planning';
+        if (completedTasks === totalTasks) {
+          newStatus = 'completed';
+        } else if (completedTasks > 0) {
+          newStatus = 'in-progress';
+        }
+
+        // Only update if status has changed
+        const currentProject = projects.find(p => p.id === column.id);
+        if (currentProject && currentProject.status !== newStatus) {
+          try {
+            await projectService.update(column.id, { status: newStatus as any });
+          } catch (error) {
+            console.error(`Error auto-updating project ${column.id} status:`, error);
+          }
+        }
+      }
+    };
+
+    if (columns.length > 0 && projects.length > 0) {
+      updateProjectStatuses();
+    }
+  }, [columns, projects]);
+
+  // Enhanced task deletion with event-based updates
   const handleDeleteTask = async (taskId: string, taskTitle: string, columnId: string) => {
     const success = await originalHandleDeleteTask(taskId, taskTitle, columnId);
     
-    if (success) {
-      // Add a small delay and then refresh to ensure UI is updated
-      setTimeout(async () => {
-        await refreshTasks();
-      }, 1000);
-    } else {
-      // If deletion failed, refresh the tasks to get the current state
-      await refreshTasks();
-    }
-    
     return success;
   };
-
-  // Load facility data on mount and when id changes using optimized method
   useEffect(() => {
     if (id) {
       loadFacilityData();
@@ -296,19 +325,8 @@ const FacilityView: React.FC = () => {
   }, [id]);
 
   // Collect available assignees from facility members
-  const [availableAssignees, setAvailableAssignees] = useState<Array<{id: string, name: string}>>([]);
+  const [availableAssignees, setAvailableAssignees] = useState<Array<{id: string, name: string, email?: string, profilePicture?: string}>>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-
-  // Handle task updates
-  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
-    try {
-      await taskService.update(taskId, updates);
-      // Refresh tasks to get updated data
-      await refreshTasks();
-    } catch (error) {
-      console.error('Failed to update task:', error);
-    }
-  };
 
   // Fetch facility members for assignee filter
   useEffect(() => {
@@ -319,9 +337,12 @@ const FacilityView: React.FC = () => {
         const membersData = await facilityService.getFacilityMembers(facility.id);
         const assignees = membersData.map(member => ({
           id: member.id,
-          name: member.name
+          name: member.name,
+          email: member.email,
+          profilePicture: member.profilePicture
         }));
         setAvailableAssignees(assignees);
+        
       } catch (error) {
         console.error('Failed to fetch facility members for assignee filter:', error);
         setAvailableAssignees([]);
@@ -330,6 +351,7 @@ const FacilityView: React.FC = () => {
 
     fetchFacilityMembers();
   }, [facility?.id, memberRefreshTriggers[facility?.id || '']]);
+
 
   // Collect available tags from all tasks
   useEffect(() => {
@@ -343,6 +365,25 @@ const FacilityView: React.FC = () => {
     });
     setAvailableTags(Array.from(tags));
   }, [columns]);
+
+  // Handle task updates
+  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
+    try {
+      // Convert assignees from objects to strings if needed
+      const updateData = { ...updates };
+      if (updateData.assignees && Array.isArray(updateData.assignees)) {
+        updateData.assignees = updateData.assignees.map((assignee: any) => 
+          typeof assignee === 'string' ? assignee : assignee.id
+        );
+      }
+      
+      await taskService.update(taskId, updateData as any);
+      // Note: Removed refreshTasks() call - real-time updates are handled by the event system
+    } catch (error) {
+      console.error('Failed to update task:', error);
+    }
+  };
+
 
   // Filter columns based on search term and filter criteria
   const filteredColumns = React.useMemo(() => {
@@ -400,11 +441,140 @@ const FacilityView: React.FC = () => {
 
       // Assignee filter
       if (assigneeFilter !== 'all') {
+        
         filteredTasks = filteredTasks.filter(task => {
-          // Match by assignee name or assignee ID
-          return task.assigneeName === assigneeFilter || 
-                 task.assignee === assigneeFilter ||
-                 (task.assignee && availableAssignees.some(a => a.id === task.assignee && a.name === assigneeFilter));
+          // Check for assignee data in various field names
+          const hasAssignee = task.assignee || 
+                             task.assigneeName || 
+                             (task as any).assigneeIds ||
+                             (task as any).assignedTo ||
+                             (task as any).assignedToName ||
+                             (task as any).userId ||
+                             (task as any).user ||
+                             (task as any).owner ||
+                             (task as any).ownerId;
+          
+          // Check if any of these fields have actual values (not just truthy)
+          const hasValue = hasAssignee && 
+                          hasAssignee !== '' && 
+                          hasAssignee !== null && 
+                          hasAssignee !== undefined &&
+                          (Array.isArray(hasAssignee) ? hasAssignee.length > 0 : true);
+          
+          if (!hasValue) {
+            return false;
+          }
+          
+          // Match by assignee name (primary check) - exact match
+          if (task.assigneeName === assigneeFilter) {
+            return true;
+          }
+          
+          // Match by assignee name (case-insensitive)
+          if (task.assigneeName && task.assigneeName.toLowerCase() === assigneeFilter.toLowerCase()) {
+            return true;
+          }
+          
+          // Match by assignee ID if assigneeName doesn't match
+          if (task.assignee === assigneeFilter) {
+            return true;
+          }
+          
+          // Match by assignee ID (case-insensitive for string IDs)
+          if (task.assignee && task.assignee.toLowerCase() === assigneeFilter.toLowerCase()) {
+            return true;
+          }
+          
+          // Match by assigneeIds array
+          if ((task as any).assigneeIds && Array.isArray((task as any).assigneeIds)) {
+            const assigneeIds = (task as any).assigneeIds;
+            if (assigneeIds.includes(assigneeFilter)) {
+              return true;
+            }
+          }
+          
+          // Match by other possible field names
+          if ((task as any).assignedTo === assigneeFilter || 
+              (task as any).assignedToName === assigneeFilter ||
+              (task as any).userId === assigneeFilter ||
+              (task as any).user === assigneeFilter ||
+              (task as any).owner === assigneeFilter ||
+              (task as any).ownerId === assigneeFilter) {
+            return true;
+          }
+          
+          // Match by finding the assignee in availableAssignees by name
+          if (availableAssignees.length > 0) {
+            const matchingAssignee = availableAssignees.find(a => a.name === assigneeFilter);
+            if (matchingAssignee) {
+              // Check multiple assignee field names
+              const taskAssigneeId = task.assignee || 
+                                   (task as any).assignedTo ||
+                                   (task as any).userId ||
+                                   (task as any).user ||
+                                   (task as any).owner ||
+                                   (task as any).ownerId;
+              
+              if (taskAssigneeId === matchingAssignee.id) {
+                return true;
+              }
+              
+              // Check assigneeIds array
+              if ((task as any).assigneeIds && Array.isArray((task as any).assigneeIds)) {
+                const assigneeIds = (task as any).assigneeIds;
+                if (assigneeIds.includes(matchingAssignee.id)) {
+                  return true;
+                }
+              }
+            }
+          }
+          
+          if (task.assigneeName && assigneeFilter) {
+            const taskName = task.assigneeName.toLowerCase();
+            const filterName = assigneeFilter.toLowerCase();
+
+            if (taskName.includes(filterName) || filterName.includes(taskName)) {
+              return true;
+            }
+
+            if (filterName.includes('@')) {
+              const emailUsername = filterName.split('@')[0];
+              if (taskName.includes(emailUsername) || emailUsername.includes(taskName)) {
+                return true;
+              }
+            }
+          }
+          
+          if (availableAssignees.length > 0) {
+            const matchingAssignee = availableAssignees.find(a => a.name === assigneeFilter);
+            if (matchingAssignee) {
+              if (task.assigneeName && task.assigneeName.toLowerCase() === matchingAssignee.name.toLowerCase()) {
+                return true;
+              }
+              
+              // Try to match by partial name comparison
+              if (task.assigneeName && matchingAssignee.name) {
+                const taskName = task.assigneeName.toLowerCase();
+                const memberName = matchingAssignee.name.toLowerCase();
+                
+                // Check if names are similar (one contains the other)
+                if (taskName.includes(memberName) || memberName.includes(taskName)) {
+                  return true;
+                }
+              }
+              
+              if (task.assigneeName && matchingAssignee.email) {
+                const taskEmail = task.assigneeName.toLowerCase();
+                const memberEmail = matchingAssignee.email.toLowerCase();
+  
+                if (taskEmail === memberEmail || taskEmail.includes(memberEmail.split('@')[0])) {
+                  return true;
+                }
+              }
+            }
+          }
+          
+          return false;
         });
       }
 
@@ -429,18 +599,24 @@ const FacilityView: React.FC = () => {
     });
   }, [columns, searchTerm, filter, assigneeFilter, tagFilter, priorityFilter, availableAssignees]);
 
+
+
   // Listen for task updates from TaskDetailModal
   useEffect(() => {
-    const handleTaskUpdated = (event: CustomEvent) => {
+    const handleTaskUpdated = async (event: CustomEvent) => {
       const updatedTask = event.detail;
       setColumns(prevColumns =>
         prevColumns.map(column => ({
           ...column,
           tasks: column.tasks.map(task =>
-            task.id === updatedTask.id ? updatedTask : task
+            task.id === updatedTask.id ? { 
+              ...updatedTask, 
+              _clientUpdatedAt: Date.now()
+            } : task
           )
         }))
       );
+      
     };
 
     const handleTaskDeleted = (event: CustomEvent) => {
@@ -453,11 +629,11 @@ const FacilityView: React.FC = () => {
       );
     };
 
-    window.addEventListener('taskUpdated', handleTaskUpdated as EventListener);
+    window.addEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
     window.addEventListener('taskDeleted', handleTaskDeleted as EventListener);
 
     return () => {
-      window.removeEventListener('taskUpdated', handleTaskUpdated as EventListener);
+      window.removeEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
       window.removeEventListener('taskDeleted', handleTaskDeleted as EventListener);
     };
   }, []);
@@ -502,8 +678,6 @@ const FacilityView: React.FC = () => {
         totalTasks={facilityStats?.taskCount || 0}
         completedTasks={facilityStats?.completedTaskCount || 0}
         overdueTasks={facilityStats?.overdueTaskCount || 0}
-        currentView={currentView}
-        onViewChange={setCurrentView}
         assigneeFilter={assigneeFilter}
         setAssigneeFilter={setAssigneeFilter}
         tagFilter={tagFilter}
@@ -553,11 +727,17 @@ const FacilityView: React.FC = () => {
       />
 
 
-      {/* View Content */}
-      <div className="flex-1">
-        {currentView === 'kanban' && (
-          <div className="h-full">
-            <KanbanBoard
+      {/* View Content with Enhanced Transitions */}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* Kanban View */}
+        <div className={`
+          absolute inset-0 transition-all duration-300 ease-in-out
+          ${currentView === 'kanban' 
+            ? 'opacity-100 z-10' 
+            : 'opacity-0 z-0 pointer-events-none'
+          }
+        `}>
+          <KanbanBoard
             columns={filteredColumns}
             isDarkMode={isDarkMode}
             editingTaskId={editingTaskId}
@@ -591,46 +771,79 @@ const FacilityView: React.FC = () => {
             handleArchiveProject={handleArchiveProject}
             handleDeleteProject={handleDeleteProject}
             handleUpdateProjectName={handleUpdateProjectName}
+            handleUpdateProjectStatus={handleUpdateProjectStatus}
             handleOpenTaskDetail={handleOpenTaskDetail}
             onTaskMove={handleTaskMove}
             facilityId={id}
+            selectedProjectId={selectedProjectId}
           />
-          </div>
-        )}
+        </div>
         
-        {currentView === 'list' && (
-          <div className="overflow-auto">
+        {/* List View */}
+        <div className={`
+          absolute inset-0 transition-all duration-300 ease-in-out
+          ${currentView === 'list' 
+            ? 'opacity-100 z-10' 
+            : 'opacity-0 z-0 pointer-events-none'
+          }
+        `}>
+          <div className="flex-1 overflow-auto h-full">
             <ListView
-            columns={filteredColumns}
-            isDarkMode={isDarkMode}
-            onTaskClick={handleOpenTaskDetail}
-            onTaskUpdate={handleTaskUpdate}
-            onTaskDelete={handleTaskDeleteClick}
-            onTaskMove={handleTaskMove}
-          />
+              columns={filteredColumns}
+              isDarkMode={isDarkMode}
+              onTaskClick={handleOpenTaskDetail}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDeleteClick}
+              onTaskMove={handleTaskMove}
+            />
           </div>
-        )}
+        </div>
         
-        {currentView === 'calendar' && (
-          <CalendarView
-            columns={filteredColumns}
-            isDarkMode={isDarkMode}
-            onTaskClick={handleOpenTaskDetail}
-            onTaskUpdate={handleTaskUpdate}
-            onTaskDelete={handleTaskDeleteClick}
-          />
-        )}
+        {/* Calendar View */}
+        <div className={`
+          absolute inset-0 transition-all duration-300 ease-in-out
+          ${currentView === 'calendar' 
+            ? 'opacity-100 z-10' 
+            : 'opacity-0 z-0 pointer-events-none'
+          }
+        `}>
+          <div className="flex-1 overflow-auto h-full">
+            <CalendarView
+              columns={filteredColumns}
+              isDarkMode={isDarkMode}
+              onTaskClick={handleOpenTaskDetail}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDeleteClick}
+            />
+          </div>
+        </div>
         
-        {currentView === 'timeline' && (
-          <TimelineView
-            columns={filteredColumns}
-            isDarkMode={isDarkMode}
-            onTaskClick={handleOpenTaskDetail}
-            onTaskUpdate={handleTaskUpdate}
-            onTaskDelete={handleTaskDeleteClick}
-          />
-        )}
+        {/* Timeline View */}
+        <div className={`
+          absolute inset-0 transition-all duration-500 ease-in-out transform
+          ${currentView === 'timeline' 
+            ? 'opacity-100 translate-x-0 z-10' 
+            : 'opacity-0 translate-x-full z-0 pointer-events-none'
+          }
+        `}>
+          <div className="flex-1 overflow-auto h-full">
+            <TimelineView
+              columns={filteredColumns}
+              isDarkMode={isDarkMode}
+              onTaskClick={handleOpenTaskDetail}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDeleteClick}
+            />
+          </div>
+        </div>
       </div>
+
+      {/* Floating View Navigation */}
+      <FloatingViewNavigation
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        isDarkMode={isDarkMode}
+      />
 
       {showNotification && (
         <Notification
@@ -687,13 +900,14 @@ const FacilityView: React.FC = () => {
           isDarkMode={isDarkMode}
         />
       )}
-      {isTaskDetailDrawerOpen && selectedTaskId && (
-        <TaskDetailDrawer
+      {isTaskDetailModalOpen && selectedTaskId && (
+        <TaskDetailModal
           taskId={selectedTaskId}
-          isOpen={isTaskDetailDrawerOpen}
+          isOpen={isTaskDetailModalOpen}
           onClose={() => {
-            setIsTaskDetailDrawerOpen(false);
+            setIsTaskDetailModalOpen(false);
             setSelectedTaskId(null);
+
           }}
         />
       )}

@@ -10,9 +10,6 @@ import {
   LucideClock,
   LucideCheckCircle,
   LucideAlertCircle,
-  LucideGrid3X3,
-  LucideList,
-  LucideCalendar as CalendarIcon,
   LucideChevronDown,
   LucideUser,
   LucideFlag,
@@ -28,7 +25,6 @@ import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import ShareFacilityModal from './ShareFacilityModal';
 import BreadcrumbDropdown from '../../../components/BreadcrumbDropdown';
 import SavedFilterViews from '../../../components/SavedFilterViews';
-import FloatingFiltersDrawer from '../../../components/FloatingFiltersDrawer';
 
 interface SlimFacilityHeaderProps {
   facility: Facility;
@@ -44,8 +40,6 @@ interface SlimFacilityHeaderProps {
   totalTasks?: number;
   completedTasks?: number;
   overdueTasks?: number;
-  currentView?: 'kanban' | 'list' | 'calendar' | 'timeline';
-  onViewChange?: (view: 'kanban' | 'list' | 'calendar' | 'timeline') => void;
   onInviteMember?: () => void;
   // Additional filters
   assigneeFilter?: string;
@@ -54,7 +48,7 @@ interface SlimFacilityHeaderProps {
   setTagFilter?: (tag: string) => void;
   priorityFilter?: string;
   setPriorityFilter?: (priority: string) => void;
-  availableAssignees?: Array<{id: string, name: string}>;
+  availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
   availableTags?: Array<{id: string, name: string, color: string}>;
   // Projects for breadcrumb
   projects?: Array<{id: string, title: string, taskCount?: number}>;
@@ -77,8 +71,6 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
   totalTasks = 0,
   completedTasks = 0,
   overdueTasks = 0,
-  currentView = 'kanban',
-  onViewChange,
   onInviteMember,
   assigneeFilter = 'all',
   setAssigneeFilter,
@@ -110,7 +102,6 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
-  const [isFloatingFiltersOpen, setIsFloatingFiltersOpen] = useState(false);
 
   // Calculate completion percentage from passed props
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -224,55 +215,8 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
             </div>
           </div>
 
-          {/* Right: View Switcher + Actions */}
+          {/* Right: Actions */}
           <div className="flex items-center space-x-3">
-            {/* View Switcher Tabs */}
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-              <button
-                onClick={() => onViewChange?.('kanban')}
-                className={`p-1.5 rounded transition-all duration-200 ${
-                  currentView === 'kanban'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                title="Board View"
-              >
-                <LucideGrid3X3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onViewChange?.('list')}
-                className={`p-1.5 rounded transition-all duration-200 ${
-                  currentView === 'list'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                title="List View"
-              >
-                <LucideList className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onViewChange?.('calendar')}
-                className={`p-1.5 rounded transition-all duration-200 ${
-                  currentView === 'calendar'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                title="Calendar View"
-              >
-                <CalendarIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onViewChange?.('timeline')}
-                className={`p-1.5 rounded transition-all duration-200 ${
-                  currentView === 'timeline'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                title="Timeline View"
-              >
-                <LucideClock className="w-4 h-4" />
-              </button>
-            </div>
 
             {/* Saved Views Button */}
             <button
@@ -301,15 +245,6 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
               )}
             </button>
 
-            {/* Advanced Filters Button */}
-            <button
-              onClick={() => setIsFloatingFiltersOpen(true)}
-              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              title="Advanced Filters"
-            >
-              <LucideFilter className="w-3 h-3" />
-              <span>Advanced</span>
-            </button>
 
             {/* Share Button */}
             <button
@@ -346,24 +281,48 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                 ))}
               </div>
               
-              {/* Advanced Filter Dropdowns */}
+              {/* Basic Filter Dropdowns */}
               <div className="flex items-center space-x-1">
                 {/* Assignee Filter */}
                 <div className="relative filter-dropdown">
                   <button
-                    onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
+                    onClick={() => {
+                      setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen);
+                      setIsPriorityDropdownOpen(false);
+                      setIsTagDropdownOpen(false);
+                    }}
                     className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                       assigneeFilter !== 'all'
                         ? 'bg-brand text-white shadow-md'
                         : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
-                    <LucideUser className="w-3 h-3" />
-                    <span>Assignee</span>
+                    {assigneeFilter !== 'all' ? (
+                      (() => {
+                        const selectedAssignee = availableAssignees.find(a => a.name === assigneeFilter);
+                        return selectedAssignee?.profilePicture ? (
+                          <img
+                            src={selectedAssignee.profilePicture}
+                            alt={selectedAssignee.name}
+                            className="w-3 h-3 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="w-3 h-3 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                            style={{ backgroundColor: '#6B7280' }}
+                          >
+                            {selectedAssignee?.name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <LucideUser className="w-3 h-3" />
+                    )}
+                    <span>{assigneeFilter !== 'all' ? assigneeFilter : 'Assignee'}</span>
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isAssigneeDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
                       <div className="py-1">
                         <button
                           onClick={() => {
@@ -378,7 +337,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                         </button>
                         {availableAssignees.length === 0 ? (
                           <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                            No assignees found
+                            No facility members found
                           </div>
                         ) : (
                           availableAssignees.map((assignee) => (
@@ -393,12 +352,20 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                             }`}
                           >
                             <div className="flex items-center space-x-2">
-                              <div
-                                className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                                style={{ backgroundColor: '#6B7280' }}
-                              >
-                                {assignee.name.charAt(0).toUpperCase()}
-                              </div>
+                              {assignee.profilePicture ? (
+                                <img
+                                  src={assignee.profilePicture}
+                                  alt={assignee.name}
+                                  className="w-4 h-4 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                                  style={{ backgroundColor: '#6B7280' }}
+                                >
+                                  {assignee.name?.charAt?.(0)?.toUpperCase() || '?'}
+                                </div>
+                              )}
                               <span>{assignee.name}</span>
                             </div>
                           </button>
@@ -412,7 +379,11 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                 {/* Priority Filter */}
                 <div className="relative filter-dropdown">
                   <button
-                    onClick={() => setIsPriorityDropdownOpen(!isPriorityDropdownOpen)}
+                    onClick={() => {
+                      setIsPriorityDropdownOpen(!isPriorityDropdownOpen);
+                      setIsAssigneeDropdownOpen(false);
+                      setIsTagDropdownOpen(false);
+                    }}
                     className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                       priorityFilter !== 'all'
                         ? 'bg-brand text-white shadow-md'
@@ -448,7 +419,11 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                 {/* Tag Filter */}
                 <div className="relative filter-dropdown">
                   <button
-                    onClick={() => setIsTagDropdownOpen(!isTagDropdownOpen)}
+                    onClick={() => {
+                      setIsTagDropdownOpen(!isTagDropdownOpen);
+                      setIsAssigneeDropdownOpen(false);
+                      setIsPriorityDropdownOpen(false);
+                    }}
                     className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                       tagFilter !== 'all'
                         ? 'bg-brand text-white shadow-md'
@@ -549,24 +524,6 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
         }}
       />
 
-      {/* Floating Filters Drawer */}
-      <FloatingFiltersDrawer
-        isOpen={isFloatingFiltersOpen}
-        onClose={() => setIsFloatingFiltersOpen(false)}
-        isDarkMode={isDarkMode}
-        searchTerm={searchTerm}
-        filter={filter}
-        assigneeFilter={assigneeFilter}
-        tagFilter={tagFilter}
-        priorityFilter={priorityFilter}
-        setSearchTerm={setSearchTerm}
-        setFilter={setFilter}
-        setAssigneeFilter={setAssigneeFilter || (() => {})}
-        setTagFilter={setTagFilter || (() => {})}
-        setPriorityFilter={setPriorityFilter || (() => {})}
-        availableAssignees={availableAssignees}
-        availableTags={facilityTags}
-      />
     </>
   );
 };

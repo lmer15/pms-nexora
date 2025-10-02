@@ -11,7 +11,8 @@ const {
   createTask,
   updateTask,
   pinTask,
-  deleteTask
+  deleteTask,
+  bulkUpdateTaskStatus
 } = require('../controllers/taskController');
 
 // Import sub-routes
@@ -23,7 +24,7 @@ const taskTimeLogRoutes = require('./taskTimeLogRoutes');
 const taskActivityLogRoutes = require('./taskActivityLogRoutes');
 
 // Apply rate limiting and sanitization to all routes
-router.use(rateLimit(200, 15 * 60 * 1000)); // 200 requests per 15 minutes
+router.use(rateLimit(500, 15 * 60 * 1000)); // 500 requests per 15 minutes (increased for development)
 router.use(sanitizeInput);
 
 // Routes
@@ -35,6 +36,7 @@ router.get('/user/:userId', authMiddleware, getTasksByUser);
 router.post('/', authMiddleware, validateTask, createTask);
 router.put('/:id', authMiddleware, validateTaskUpdate, updateTask);
 router.put('/:id/pin', authMiddleware, pinTask);
+router.put('/bulk/status', authMiddleware, bulkUpdateTaskStatus);
 router.delete('/:id', authMiddleware, deleteTask);
 
 // Sub-routes for task details

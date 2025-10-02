@@ -55,7 +55,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   onSwitchToDependencies,
   onSwitchToSubtasks
 }) => {
-  const { memberRefreshTriggers } = useFacilityRefresh();
+  const { memberRefreshTriggers, triggerUserProfileRefresh } = useFacilityRefresh();
   const [editingField, setEditingField] = React.useState<string | null>(null);
   const [facilityMembers, setFacilityMembers] = React.useState<FacilityMember[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -118,7 +118,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     if (m.id === excludeUserId) return false;
     
     // Exclude already assigned members
-    const currentAssignees = editedTask.assignees || task.assignees || [];
+    const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
     const singleAssignee = editedTask.assignee || task.assignee;
     const allAssignees = currentAssignees.length > 0 ? currentAssignees : (singleAssignee ? [singleAssignee] : []);
     
@@ -383,7 +383,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                   <div className="flex items-center gap-2 min-h-[32px]">
                     {/* Show current assignees (from editedTask or task) */}
                     {(() => {
-                      const currentAssignees = editedTask.assignees || task.assignees || [];
+                      const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
                       const singleAssignee = editedTask.assignee || task.assignee;
                       
                       // Handle backward compatibility - if there's a single assignee but no assignees array
@@ -415,10 +415,12 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     const updatedAssignees = allAssignees.filter(id => id !== assigneeId);
-                                    handleInputChange('assignees', updatedAssignees);
+                                    handleInputChange('assigneeIds', updatedAssignees);
                                     try {
                                       if (onFieldChangeAndSave) {
-                                        await onFieldChangeAndSave('assignees', updatedAssignees);
+                                        await onFieldChangeAndSave('assignees' as keyof Task, updatedAssignees);
+                                        // Trigger user profile refresh to update avatars
+                                        triggerUserProfileRefresh(updatedAssignees);
                                       }
                                     } catch (error) {
                                       console.error('Failed to remove assignee:', error);
@@ -485,19 +487,21 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                             e.stopPropagation();
                             
                             // Get current assignees
-                            const currentAssignees = editedTask.assignees || task.assignees || [];
+                            const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
                             const singleAssignee = editedTask.assignee || task.assignee;
                             const allAssignees = currentAssignees.length > 0 ? currentAssignees : (singleAssignee ? [singleAssignee] : []);
                             
                             // Add new assignee if not already assigned
                             if (!allAssignees.includes(member.id)) {
                               const updatedAssignees = [...allAssignees, member.id];
-                              handleInputChange('assignees', updatedAssignees);
+                              handleInputChange('assigneeIds', updatedAssignees);
                               
                               // Auto-save to database
                               try {
                                 if (onFieldChangeAndSave) {
-                                  await onFieldChangeAndSave('assignees', updatedAssignees);
+                                  await onFieldChangeAndSave('assignees' as keyof Task, updatedAssignees);
+                                  // Trigger user profile refresh to update avatars
+                                  triggerUserProfileRefresh(updatedAssignees);
                                 }
                               } catch (error) {
                                 console.error('Failed to save assignee:', error);
@@ -1118,18 +1122,21 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                   className={`text-sm leading-relaxed w-full min-h-[100px] resize-y ${isDarkMode ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent`}
                   placeholder="Add task details here..."
                   value={editedTask.description ?? task.description ?? ''}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  onBlur={async () => {
-                    setEditingField(null);
+                  onChange={async (e) => {
+                    const newValue = e.target.value;
+                    handleInputChange('description', newValue);
                     
-                    // Auto-save to database when user finishes editing
+                    // Auto-save to database instantly on every change
                     try {
                       if (onFieldChangeAndSave) {
-                        await onFieldChangeAndSave('description', editedTask.description ?? task.description ?? '');
+                        await onFieldChangeAndSave('description', newValue);
                       }
                     } catch (error) {
                       console.error('Failed to save description:', error);
                     }
+                  }}
+                  onBlur={() => {
+                    setEditingField(null);
                   }}
                   autoFocus
                 />

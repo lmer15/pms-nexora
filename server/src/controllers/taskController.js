@@ -242,6 +242,7 @@ exports.getTasksByProject = async (req, res) => {
         taskData.assigneeName = userProfiles[task.assigneeId]?.displayName || 
                                userProfiles[task.assigneeId]?.email || 
                                'Unknown User';
+        taskData.assigneeProfilePicture = userProfiles[task.assigneeId]?.profilePicture;
       }
       
       // Convert timestamps to ISO strings
@@ -320,7 +321,6 @@ exports.createTask = async (req, res) => {
       ...taskData,
       status: taskData.status || 'todo',
       priority: taskData.priority || 'medium',
-      assigneeId: taskData.assigneeId || null,
       dueDate: taskData.dueDate || null,
       tags: taskData.tags || [],
       progress: taskData.progress || 0
@@ -575,5 +575,80 @@ exports.deleteTask = async (req, res) => {
   } catch (error) {
     console.error('Error deleting task:', error);
     res.status(500).json({ message: 'Server error deleting task' });
+  }
+};
+
+// Bulk update task statuses
+exports.bulkUpdateTaskStatus = async (req, res) => {
+  try {
+    const { taskIds, status } = req.body;
+    
+    // Validate input
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      return res.status(400).json({ message: 'taskIds must be a non-empty array' });
+    }
+    
+    const validStatuses = ['todo', 'in-progress', 'review', 'done'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+    
+    // Check access for all tasks
+    const tasks = [];
+    const projectIds = new Set();
+    
+    for (const taskId of taskIds) {
+      try {
+        const accessResult = await checkTaskAccess(taskId, req.userId);
+        tasks.push(accessResult.task);
+        projectIds.add(accessResult.task.projectId);
+      } catch (accessError) {
+        return res.status(403).json({ 
+          message: `Access denied to task ${taskId}: ${accessError.message}` 
+        });
+      }
+    }
+    
+    // Update all tasks
+    const updatePromises = taskIds.map(taskId => 
+      Task.update(taskId, { status })
+    );
+    
+    const updatedTasks = await Promise.all(updatePromises);
+    
+    // Log activity for each task
+    const activityPromises = taskIds.map(taskId => 
+      ActivityLoggerService.logTaskUpdated(taskId, req.userId, { status })
+    );
+    await Promise.all(activityPromises);
+    
+    // Invalidate cache for all affected projects
+    for (const projectId of projectIds) {
+      cacheService.invalidateProjectTasksCount(projectId);
+    }
+    
+    // Get facility IDs for cache invalidation
+    const facilityPromises = Array.from(projectIds).map(async (projectId) => {
+      const project = await Project.findById(projectId);
+      return project ? project.facilityId : null;
+    });
+    const facilityIds = await Promise.all(facilityPromises);
+    
+    // Invalidate facility stats cache
+    for (const facilityId of facilityIds) {
+      if (facilityId) {
+        cacheService.invalidateFacilityStats(facilityId);
+      }
+    }
+    
+    res.json({ 
+      message: `Successfully updated ${updatedTasks.length} tasks to ${status}`,
+      updatedCount: updatedTasks.length,
+      status 
+    });
+    
+  } catch (error) {
+    console.error('Error bulk updating task statuses:', error);
+    res.status(500).json({ message: 'Server error bulk updating task statuses' });
   }
 };

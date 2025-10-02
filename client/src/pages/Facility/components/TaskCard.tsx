@@ -21,6 +21,7 @@ import { Card, Button } from '../../../components/ui';
 import { Task } from '../types';
 import { taskService } from '../../../api/taskService';
 import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
+import { cacheService } from '../../../services/cacheService';
 
 interface TaskCardProps {
   task: Task;
@@ -43,7 +44,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onTaskMove,
   facilityId,
 }) => {
-  const { memberRefreshTriggers } = useFacilityRefresh();
+  const { memberRefreshTriggers, userProfileRefreshTrigger } = useFacilityRefresh();
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -93,30 +94,123 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   // Update current task when prop changes (real-time updates)
   useEffect(() => {
-    // Check if task has actually changed
-    if (JSON.stringify(task) !== JSON.stringify(currentTask)) {
-      setIsUpdating(true);
-      setCurrentTask(task);
+    // Only update currentTask if the task prop is actually different
+    // This prevents the prop from overriding real-time updates
+    setCurrentTask(prevTask => {
+      // If the task IDs are different, always update
+      if (prevTask.id !== task.id) {
+        // console.log('TaskCard: Updating from prop - different task ID:', task.id, 'prev:', prevTask.id);
+        return task;
+      }
       
-      // Reset updating state after a short delay
-      setTimeout(() => {
-        setIsUpdating(false);
-      }, 500);
-    }
-  }, [task, currentTask]);
+      if ((prevTask as any)._clientUpdatedAt) {
+        const propUpdateTime = task.updatedAt ? new Date(task.updatedAt).getTime() : 0;
+        const clientUpdateTime = (prevTask as any)._clientUpdatedAt;
+        
+        // Only update if the prop is significantly newer (more than 1 second difference)
+        if (propUpdateTime > clientUpdateTime + 1000) {
+          // console.log('TaskCard: Updating from prop - prop is significantly newer');
+          return task;
+        } else {
+          // console.log('TaskCard: Keeping real-time update, prop not significantly newer');
+          return prevTask;
+        }
+      }
+      
+      // If the task has been updated (newer updatedAt), update it
+      if (task.updatedAt && prevTask.updatedAt && 
+          new Date(task.updatedAt).getTime() > new Date(prevTask.updatedAt).getTime()) {
+        // console.log('TaskCard: Updating from prop - newer updatedAt');
+        return task;
+      }
+      
+      return prevTask; // Keep the current task if it's newer or the same
+    });
+  }, [task]);
 
-  // Fetch all assignee profiles when task changes
+  // Listen for task updates from TaskDetailModal
+  useEffect(() => {
+    const handleTaskUpdated = (event: CustomEvent) => {
+      const updatedTask = event.detail;
+      // console.log('TaskCard: Received taskUpdated event for task:', updatedTask.id, 'current task:', task.id);
+      // console.log('TaskCard: Updated task data:', updatedTask);
+      
+      // If this is the task we're displaying, update it immediately
+      if (updatedTask.id === task.id) {
+        // console.log('TaskCard: Updating task card for task:', task.id, 'with data:', updatedTask);
+        // console.log('TaskCard: AssigneeIds in updated task:', updatedTask.assigneeIds);
+        setIsUpdating(true);
+        
+        // Update the current task with the new data
+        setCurrentTask(prevTask => {
+          const newTask = {
+            ...prevTask,
+            ...updatedTask,
+            _clientUpdatedAt: Date.now() // Add a client-side timestamp to mark this as a real-time update
+          };
+          // console.log('TaskCard: Setting new task data:', newTask);
+          // console.log('TaskCard: New assigneeIds:', newTask.assigneeIds);
+          // console.log('TaskCard: New assignees:', newTask.assignees);
+          return newTask;
+        });
+        
+        // Reset updating state after a short delay
+        setTimeout(() => {
+          setIsUpdating(false);
+        }, 300);
+      }
+    };
+
+    const handleTaskDeleted = (event: CustomEvent) => {
+      const { taskId } = event.detail;
+      
+      // If this task was deleted, we don't need to do anything here
+      // The parent component will handle removing it from the UI
+      if (taskId === task.id) {
+        // Task will be removed by parent component
+      }
+    };
+
+    window.addEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
+    window.addEventListener('taskDeleted', handleTaskDeleted as unknown as EventListener);
+
+    return () => {
+      window.removeEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
+      window.removeEventListener('taskDeleted', handleTaskDeleted as unknown as EventListener);
+    };
+  }, [task.id]); // Use task.id to avoid re-registering on every currentTask change
+
+  // Fetch all assignee profiles when task changes or user profiles are refreshed
   useEffect(() => {
     const fetchAllAssigneeProfiles = async () => {
       const taskAny = currentTask as any;
       // Use assignees field (not assigneeIds) to match the Task interface
-      const assigneeIds = taskAny.assignees || taskAny.assigneeIds || [];
+      const assignees = taskAny.assignees || taskAny.assigneeIds || [];
       
-      if (assigneeIds.length > 0) {
+      if (assignees.length > 0) {
         setLoadingProfiles(true);
         try {
-          const profiles = await taskService.fetchUserProfilesByIds(assigneeIds);
-          setAssigneeProfiles(profiles || {});
+          // Extract just the IDs from assignee objects or use strings directly
+          const assigneeIds = assignees.map((assignee: any) => {
+            if (typeof assignee === 'string') {
+              return assignee;
+            } else if (assignee && assignee.id) {
+              return assignee.id;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (assigneeIds.length > 0) {
+            // Invalidate cache if user profile refresh was triggered
+            if (userProfileRefreshTrigger > 0) {
+              cacheService.invalidateUserProfiles(assigneeIds);
+            }
+            
+            const profiles = await taskService.fetchUserProfilesByIds(assigneeIds);
+            setAssigneeProfiles(profiles || {});
+          } else {
+            setAssigneeProfiles({});
+          }
         } catch (error) {
           console.error('Failed to fetch assignee profiles:', error);
           setAssigneeProfiles({});
@@ -129,7 +223,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     };
 
     fetchAllAssigneeProfiles();
-  }, [currentTask, facilityId ? memberRefreshTriggers[facilityId] : 0]);
+  }, [currentTask, facilityId ? memberRefreshTriggers[facilityId] : 0, userProfileRefreshTrigger]);
 
 
   // Improved click handler with better event detection
@@ -401,7 +495,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center">
             {(() => {
               const taskAny = currentTask as any;
-              // Use assignees field (not assigneeIds) to match the Task interface
               const assigneeIds = taskAny.assignees || taskAny.assigneeIds || [];
               const hasAssignees = assigneeIds.length > 0;
               
@@ -459,13 +552,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
               return (
                 <div className="flex items-center">
                   {visibleAssignees.map((assigneeId, index) => {
-                    const profile = assigneeProfiles[assigneeId];
+                    // Handle both string IDs and object assignees
+                    const id = typeof assigneeId === 'string' ? assigneeId : assigneeId.id;
+                    const profile = assigneeProfiles[id];
                     const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Unknown User';
                     const initials = profile ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase() : '?';
                     
                     return (
                       <div 
-                        key={assigneeId}
+                        key={`${id}-${index}`}
                         className="w-6 h-6 rounded-full overflow-hidden bg-brand text-white flex items-center justify-center text-xs font-medium cursor-pointer border-2 border-white dark:border-gray-800"
                         title={fullName}
                         aria-label={`Assigned to: ${fullName}`}

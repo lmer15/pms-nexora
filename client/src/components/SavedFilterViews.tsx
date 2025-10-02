@@ -189,7 +189,7 @@ const SavedFilterViews: React.FC<SavedFilterViewsProps> = ({
               ) : (
                 <button
                   onClick={() => setIsCreating(true)}
-                  className="w-full flex items-center justify-center space-x-2 px-3 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-brand hover:bg-brand/5 transition-colors text-sm"
+                  className="w-full flex items-center justify-center space-x-2 px-3 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-brand hover:bg-brand/5 transition-colors text-sm text-gray-700 dark:text-gray-300"
                 >
                   <LucidePlus className="w-4 h-4" />
                   <span>Save current filters as view</span>

@@ -11,6 +11,7 @@ const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const noteRoutes = require('./routes/noteRoutes');
 const timeLogRoutes = require('./routes/timeLogRoutes');
+const savedFilterViewRoutes = require('./routes/savedFilterViewRoutes');
 const { downloadAttachment } = require('./controllers/taskAttachmentController');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandlerMiddleware');
 
@@ -47,6 +48,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/timeLogs', timeLogRoutes);
+app.use('/api/savedFilterViews', savedFilterViewRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

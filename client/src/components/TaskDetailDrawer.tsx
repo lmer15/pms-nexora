@@ -99,12 +99,6 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ taskId, isOpen, onC
       const details = await taskService.getTaskDetails(taskId);
       setTaskDetails(details);
 
-      // Dispatch custom event to notify FacilityView of the update
-      const taskUpdatedEvent = new CustomEvent('taskUpdated', {
-        detail: details.task
-      });
-      window.dispatchEvent(taskUpdatedEvent);
-
       // Fetch project to get facilityId and owner
       if (details.task.projectId) {
         const project = await projectService.getById(details.task.projectId);
@@ -168,7 +162,7 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ taskId, isOpen, onC
       const updatedTask = await taskService.update(taskDetails.task.id, { title });
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
+      // Note: loadTaskDetails() no longer dispatches events, so we dispatch here
       const taskUpdatedEvent = new CustomEvent('taskUpdated', {
         detail: {
           ...taskDetails.task,
@@ -193,7 +187,7 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ taskId, isOpen, onC
       const updatedTask = await taskService.update(taskDetails.task.id, { status });
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
+      // Note: loadTaskDetails() no longer dispatches events, so we dispatch here
       const taskUpdatedEvent = new CustomEvent('taskUpdated', {
         detail: {
           ...taskDetails.task,
@@ -216,7 +210,7 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ taskId, isOpen, onC
       const updatedTask = await taskService.pin(taskDetails.task.id, pinned);
       await loadTaskDetails();
       
-      // Dispatch custom event to notify FacilityView of the update
+      // Note: loadTaskDetails() no longer dispatches events, so we dispatch here
       const taskUpdatedEvent = new CustomEvent('taskUpdated', {
         detail: {
           ...taskDetails.task,

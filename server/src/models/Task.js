@@ -167,7 +167,6 @@ class Task extends FirestoreService {
       ...taskData,
       projectId,
       creatorId,
-      assigneeId: taskData.assigneeId || null,
       status: taskData.status || 'todo',
       priority: taskData.priority || 'medium',
       startDate: taskData.startDate || null,
