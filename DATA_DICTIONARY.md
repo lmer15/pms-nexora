@@ -67,7 +67,7 @@ This document provides a comprehensive data dictionary for the PMS (Project Mana
 | id | string | UUID v4 | 36 chars | Yes | Unique relationship identifier | "550e8400-e29b-41d4-a716-446655440001" |
 | userId | string | Firebase UID | 28 chars | Yes | User ID | "abc123def456ghi789jkl012mno" |
 | facilityId | string | UUID v4 | 36 chars | Yes | Facility ID | "550e8400-e29b-41d4-a716-446655440000" |
-| role | enum | String | 10 chars | Yes | 'owner', 'admin', 'member', 'guest' | "member" |
+| role | enum | String | 10 chars | Yes | 'owner', 'manager', 'member', 'guest' | "member" |
 | joinedAt | timestamp | ISO 8601 | 24 chars | Yes | When user joined the facility | "2024-01-15T10:30:00.000Z" |
 | lastActiveAt | timestamp | ISO 8601 | 24 chars | No | Last activity timestamp | "2024-01-20T14:45:00.000Z" |
 
@@ -471,9 +471,9 @@ interface TimeLogEntry {
 
 ### User Roles
 - `owner`: Facility owner with full access
-- `admin`: Administrative access
-- `member`: Standard member access
-- `guest`: Limited access
+- `manager`: Administrative access with user and project management
+- `member`: Standard member access with task creation and management
+- `guest`: Limited read-only access with basic interaction
 
 ### Facility Status
 - `active`: Facility is operational

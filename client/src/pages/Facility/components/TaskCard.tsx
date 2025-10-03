@@ -20,8 +20,10 @@ import { CSS } from '@dnd-kit/utilities';
 import { Card, Button } from '../../../components/ui';
 import { Task } from '../types';
 import { taskService } from '../../../api/taskService';
+import { facilityService } from '../../../api/facilityService';
 import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import { cacheService } from '../../../services/cacheService';
+import { RoleGuard } from '../../../components/RoleGuard';
 
 interface TaskCardProps {
   task: Task;
@@ -46,7 +48,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 }) => {
   const { memberRefreshTriggers, userProfileRefreshTrigger } = useFacilityRefresh();
   const [showQuickActions, setShowQuickActions] = useState(false);
-  const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
+  const [facilityMembers, setFacilityMembers] = useState<Record<string, {name: string; profilePicture?: string}>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [currentTask, setCurrentTask] = useState(task);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -180,50 +182,35 @@ const TaskCard: React.FC<TaskCardProps> = ({
     };
   }, [task.id]); // Use task.id to avoid re-registering on every currentTask change
 
-  // Fetch all assignee profiles when task changes or user profiles are refreshed
+  // Fetch facility members when task changes or facility members are refreshed
   useEffect(() => {
-    const fetchAllAssigneeProfiles = async () => {
-      const taskAny = currentTask as any;
-      // Use assignees field (not assigneeIds) to match the Task interface
-      const assignees = taskAny.assignees || taskAny.assigneeIds || [];
+    const fetchFacilityMembers = async () => {
+      if (!facilityId) return;
       
-      if (assignees.length > 0) {
-        setLoadingProfiles(true);
-        try {
-          // Extract just the IDs from assignee objects or use strings directly
-          const assigneeIds = assignees.map((assignee: any) => {
-            if (typeof assignee === 'string') {
-              return assignee;
-            } else if (assignee && assignee.id) {
-              return assignee.id;
-            }
-            return null;
-          }).filter(Boolean);
-          
-          if (assigneeIds.length > 0) {
-            // Invalidate cache if user profile refresh was triggered
-            if (userProfileRefreshTrigger > 0) {
-              cacheService.invalidateUserProfiles(assigneeIds);
-            }
-            
-            const profiles = await taskService.fetchUserProfilesByIds(assigneeIds);
-            setAssigneeProfiles(profiles || {});
-          } else {
-            setAssigneeProfiles({});
-          }
-        } catch (error) {
-          console.error('Failed to fetch assignee profiles:', error);
-          setAssigneeProfiles({});
-        } finally {
-          setLoadingProfiles(false);
-        }
-      } else {
-        setAssigneeProfiles({});
+      setLoadingProfiles(true);
+      try {
+        const members = await facilityService.getFacilityMembers(facilityId);
+        
+        // Convert members array to a lookup object
+        const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
+        members.forEach(member => {
+          membersLookup[member.id] = {
+            name: member.name,
+            profilePicture: member.profilePicture
+          };
+        });
+        
+        setFacilityMembers(membersLookup);
+      } catch (error) {
+        console.error('Failed to fetch facility members:', error);
+        setFacilityMembers({});
+      } finally {
+        setLoadingProfiles(false);
       }
     };
 
-    fetchAllAssigneeProfiles();
-  }, [currentTask, facilityId ? memberRefreshTriggers[facilityId] : 0, userProfileRefreshTrigger]);
+    fetchFacilityMembers();
+  }, [facilityId, memberRefreshTriggers[facilityId || '']]);
 
 
   // Improved click handler with better event detection
@@ -438,21 +425,22 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     >
                       <LucideEye className="w-4 h-4 text-green-600 dark:text-green-400" />
                     </Button>
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                handleDeleteClick(e);
-              }}
-              variant="ghost"
-              size="sm"
-              disabled={isDeleting}
-              className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
-              aria-label={`Delete task: ${currentTask.title}`}
-              draggable={false}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
+            <RoleGuard requiredPermission="tasks.delete" facilityId={facilityId}>
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleDeleteClick(e);
+                }}
+                variant="ghost"
+                size="sm"
+                disabled={isDeleting}
+                className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
+                aria-label={`Delete task: ${currentTask.title}`}
+                draggable={false}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
               }}
               onMouseUp={(e) => {
                 e.stopPropagation();
@@ -473,6 +461,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             >
               <LucideTrash2 className="w-4 h-4" />
             </Button>
+            </RoleGuard>
           </div>
         </div>
 
@@ -554,9 +543,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   {visibleAssignees.map((assigneeId, index) => {
                     // Handle both string IDs and object assignees
                     const id = typeof assigneeId === 'string' ? assigneeId : assigneeId.id;
-                    const profile = assigneeProfiles[id];
-                    const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Unknown User';
-                    const initials = profile ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase() : '?';
+                    const member = facilityMembers[id];
+                    const fullName = member ? member.name : 'Unknown User';
+                    const initials = member ? member.name.charAt(0).toUpperCase() : '?';
                     
                     return (
                       <div 
@@ -569,9 +558,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                           zIndex: maxVisible - index 
                         }}
                       >
-                        {profile?.profilePicture ? (
+                        {member?.profilePicture ? (
                           <img
-                            src={profile.profilePicture}
+                            src={member.profilePicture}
                             alt={fullName}
                             className="w-full h-full object-cover"
                           />

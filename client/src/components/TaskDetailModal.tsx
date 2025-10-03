@@ -8,6 +8,7 @@ import LoadingAnimation from './LoadingAnimation';
 import { ErrorAlert } from './ui/error-alert';
 import { ConfirmationDialog } from './ui/confirmation-dialog';
 import Notification from './Notification';
+import { RoleGuard, usePermissions } from './RoleGuard';
 
 import TaskDetailHeader from './TaskDetail/TaskDetailHeader';
 import TaskDetailCoreDetails from './TaskDetail/TaskDetailCoreDetails';
@@ -36,6 +37,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   const [editedTask, setEditedTask] = useState<Partial<Task>>({});
   const [titleSaving, setTitleSaving] = useState(false);
   const [facilityId, setFacilityId] = useState<string>('');
+  const { hasPermission } = usePermissions(facilityId ? facilityId : undefined);
   const [projectOwnerId, setProjectOwnerId] = useState<string>('');
   const loadingRef = useRef(false);
 
@@ -342,7 +344,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={closeModal} />
       <div
         className={`relative z-10 w-full max-w-6xl h-[90vh] max-h-[800px] rounded-lg overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
@@ -358,7 +360,21 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
             <ErrorAlert title="Error" message={error} />
           </div>
         ) : taskDetails ? (
-          <>
+          <RoleGuard requiredPermission="tasks.view_all" facilityId={facilityId} fallback={
+            <div className="p-8 text-center">
+              <div className="text-4xl mb-4">🔒</div>
+              <h3 className="text-lg font-semibold mb-2">Access Restricted</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                You don't have permission to view task details.
+              </p>
+              <button
+                onClick={onClose}
+                className="mt-4 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          }>
             <TaskDetailHeader
               task={taskDetails.task}
               onClose={closeModal}
@@ -388,47 +404,74 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                   <span className="hidden sm:inline">Overview</span>
                   <span className="sm:hidden">Overview</span>
                 </button>
-                <button
-                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
-                    activeTab === 'comments'
-                      ? 'bg-green-600 text-white'
-                      : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-800'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  onClick={() => setActiveTab('comments')}
-                >
-                  <LucideMessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> 
-                  <span>Comments</span>
-                  {commentCount > 0 && (
-                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                <RoleGuard requiredPermission="comments.add" facilityId={facilityId} fallback={
+                  <button
+                    disabled
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 opacity-50 cursor-not-allowed ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                    title="No permission to view comments"
+                  >
+                    <LucideMessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span>Comments</span>
+                  </button>
+                }>
+                  <button
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                       activeTab === 'comments'
-                        ? 'bg-green-500 text-white'
-                        : isDarkMode 
-                        ? 'bg-gray-700 text-gray-300' 
-                        : 'bg-gray-200 text-gray-700'
-                    }`}>{commentCount}</span>
-                  )}
-                </button>
-                <button
-                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
-                    activeTab === 'attachments'
-                      ? 'bg-brand text-white'
-                      : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-800'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  onClick={() => setActiveTab('attachments')}
-                >
-                  <LucidePaperclip className="w-3 h-3 sm:w-4 sm:h-4" /> 
-                  <span className="hidden sm:inline">Attachments</span>
-                  <span className="sm:hidden">Files</span>
-                  {taskDetails.attachments?.length > 0 && (
-                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
-                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                    }`}>{taskDetails.attachments.length}</span>
-                  )}
-                </button>
+                        ? 'bg-green-600 text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-800'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    onClick={() => setActiveTab('comments')}
+                  >
+                    <LucideMessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span>Comments</span>
+                    {commentCount > 0 && (
+                      <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                        activeTab === 'comments'
+                          ? 'bg-green-500 text-white'
+                          : isDarkMode 
+                          ? 'bg-gray-700 text-gray-300' 
+                          : 'bg-gray-200 text-gray-700'
+                      }`}>{commentCount}</span>
+                    )}
+                  </button>
+                </RoleGuard>
+                <RoleGuard requiredPermission="attachments.add" facilityId={facilityId} fallback={
+                  <button
+                    disabled
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 opacity-50 cursor-not-allowed ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                    title="No permission to view attachments"
+                  >
+                    <LucidePaperclip className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span className="hidden sm:inline">Attachments</span>
+                    <span className="sm:hidden">Files</span>
+                  </button>
+                }>
+                  <button
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
+                      activeTab === 'attachments'
+                        ? 'bg-brand text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-800'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    onClick={() => setActiveTab('attachments')}
+                  >
+                    <LucidePaperclip className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span className="hidden sm:inline">Attachments</span>
+                    <span className="sm:hidden">Files</span>
+                    {taskDetails.attachments?.length > 0 && (
+                      <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                        isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                      }`}>{taskDetails.attachments.length}</span>
+                    )}
+                  </button>
+                </RoleGuard>
                 <button
                   className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'dependencies'
@@ -467,25 +510,39 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                     }`}>{taskDetails.subtasks.length}</span>
                   )}
                 </button>
-                <button
-                  className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
-                    activeTab === 'timelogs'
-                      ? 'bg-brand text-white'
-                      : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-800'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  onClick={() => setActiveTab('timelogs')}
-                >
-                  <LucideClock className="w-3 h-3 sm:w-4 sm:h-4" /> 
-                  <span className="hidden sm:inline">Time Logs</span>
-                  <span className="sm:hidden">Time</span>
-                  {taskDetails.timeLogs?.length > 0 && (
-                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
-                      isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                    }`}>{taskDetails.timeLogs.length}</span>
-                  )}
-                </button>
+                <RoleGuard requiredPermission="time_logs.view_all" facilityId={facilityId} fallback={
+                  <button
+                    disabled
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 opacity-50 cursor-not-allowed ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                    title="No permission to view time logs"
+                  >
+                    <LucideClock className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span className="hidden sm:inline">Time Logs</span>
+                    <span className="sm:hidden">Time</span>
+                  </button>
+                }>
+                  <button
+                    className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
+                      activeTab === 'timelogs'
+                        ? 'bg-brand text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-800'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    onClick={() => setActiveTab('timelogs')}
+                  >
+                    <LucideClock className="w-3 h-3 sm:w-4 sm:h-4" /> 
+                    <span className="hidden sm:inline">Time Logs</span>
+                    <span className="sm:hidden">Time</span>
+                    {taskDetails.timeLogs?.length > 0 && (
+                      <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                        isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                      }`}>{taskDetails.timeLogs.length}</span>
+                    )}
+                  </button>
+                </RoleGuard>
                 <button
                   className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm rounded-md whitespace-nowrap flex-1 ${
                     activeTab === 'activity'
@@ -590,7 +647,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, isOpen, onClo
                 />
               )}
             </div>
-          </>
+          </RoleGuard>
         ) : null}
 
         {/* Confirmation Dialog */}

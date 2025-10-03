@@ -4,7 +4,7 @@ const Facility = require('../models/Facility');
 // Role hierarchy for permission checking
 const ROLE_HIERARCHY = {
   'owner': 4,
-  'admin': 3,
+  'manager': 3,
   'member': 2,
   'guest': 1
 };
@@ -68,8 +68,8 @@ const checkFacilityRole = (requiredRole) => {
   };
 };
 
-// Check if user can manage members (admin or owner)
-const canManageMembers = checkFacilityRole('admin');
+// Check if user can manage members (manager or owner)
+const canManageMembers = checkFacilityRole('manager');
 
 // Check if user can manage facility settings (owner only)
 const canManageFacility = checkFacilityRole('owner');
@@ -77,18 +77,19 @@ const canManageFacility = checkFacilityRole('owner');
 // Check if user can view facility (any member)
 const canViewFacility = checkFacilityRole('guest');
 
-// Check if user can manage invitations (admin or owner)
-const canManageInvitations = checkFacilityRole('admin');
+// Check if user can manage invitations (manager or owner)
+const canManageInvitations = checkFacilityRole('manager');
 
-// Check if user can manage share links (admin or owner)
-const canManageShareLinks = checkFacilityRole('admin');
+// Check if user can manage share links (manager or owner)
+const canManageShareLinks = checkFacilityRole('manager');
 
-// Check if user can approve join requests (admin or owner)
-const canManageJoinRequests = checkFacilityRole('admin');
+// Check if user can approve join requests (manager or owner)
+const canManageJoinRequests = checkFacilityRole('manager');
 
 // Middleware to check if user can update member roles
 const canUpdateMemberRole = async (req, res, next) => {
   try {
+    console.log('canUpdateMemberRole middleware called');
     const { targetUserId, newRole } = req.body;
     const facilityId = req.params.facilityId || req.params.id;
     const currentUserRole = req.userRole;
@@ -103,7 +104,27 @@ const canUpdateMemberRole = async (req, res, next) => {
     }
 
     // Get target user's current role
-    const targetUserRelation = await UserFacility.findByUserAndFacility(targetUserId, facilityId);
+    console.log('Looking for user in facility:', { targetUserId, facilityId });
+    
+    // Debug: Let's see all relationships for this facility
+    const allRelations = await UserFacility.findByFacility(facilityId);
+    console.log('All relationships in facility:', allRelations.map(r => ({ id: r.id, userId: r.userId, role: r.role })));
+    
+    // Try to find the user by the provided ID first
+    let targetUserRelation = await UserFacility.findByUserAndFacility(targetUserId, facilityId);
+    
+    // If not found, try to find by Firebase UID by looking up the user first
+    if (!targetUserRelation || targetUserRelation.length === 0) {
+      console.log('User not found by direct ID, trying to find by Firebase UID...');
+      const User = require('../models/User');
+      const user = await User.findByFirebaseUid(targetUserId);
+      if (user && user.id) {
+        console.log('Found user by Firebase UID:', { firebaseUid: targetUserId, databaseId: user.id });
+        targetUserRelation = await UserFacility.findByUserAndFacility(user.id, facilityId);
+      }
+    }
+    
+    console.log('Found target user relation:', targetUserRelation);
     if (!targetUserRelation || targetUserRelation.length === 0) {
       return res.status(404).json({ message: 'Target user is not a member of this facility' });
     }

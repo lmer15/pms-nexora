@@ -1,4 +1,5 @@
 import api from './api';
+import cacheService from '../services/cacheService';
 
 export interface Project {
   id: string;
@@ -41,7 +42,11 @@ export const projectService = {
   // Update project
   update: async (id: string, projectData: Partial<Project>): Promise<Project> => {
     const response = await api.put(`/projects/${id}`, projectData);
-    return response.data;
+    const updatedProject = response.data;
+    
+    cacheService.invalidateFacility(updatedProject.facilityId);
+    
+    return updatedProject;
   },
 
   // Delete project

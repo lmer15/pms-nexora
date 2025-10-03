@@ -9,6 +9,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { Column, Task } from '../types';
 import TaskCard from './TaskCard';
+import { RoleGuard, usePermissions } from '../../../components/RoleGuard';
 
 interface ProjectColumnProps {
   column: Column;
@@ -75,11 +76,16 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
   facilityId,
   selectedProjectId,
 }) => {
+  const { hasPermission } = usePermissions();
   // State for status dropdown
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   
   // State for highlight effect
   const [isHighlighted, setIsHighlighted] = useState(false);
+
+  // Local state for project status (for instant updates)
+  const [currentProjectStatus, setCurrentProjectStatus] = useState<string | null>(null);
+  const [lastClientUpdate, setLastClientUpdate] = useState<number | null>(null);
 
   // Effect to handle project selection highlight
   useEffect(() => {
@@ -95,6 +101,19 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
       setIsHighlighted(false);
     }
   }, [selectedProjectId, column.id]);
+
+  // Reset local status when server data updates (similar to TaskCard pattern)
+  useEffect(() => {
+    // If the column's temporary status is cleared and we have project status, it means the server has updated
+    if (!(column as any)._status && (column as any)._projectStatus && currentProjectStatus && lastClientUpdate) {
+      // Check if enough time has passed since our client update
+      const timeSinceClientUpdate = Date.now() - lastClientUpdate;
+      if (timeSinceClientUpdate > 2000) { // 2 seconds
+        setCurrentProjectStatus(null);
+        setLastClientUpdate(null);
+      }
+    }
+  }, [column, currentProjectStatus, lastClientUpdate]);
 
   // Project status colors
   const statusColors = {
@@ -117,7 +136,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
     return 'planning';
   };
 
-  const currentStatus = calculateProjectStatus();
+  const currentStatus = currentProjectStatus || (column as any)._status || (column as any)._projectStatus || (column as any).status || calculateProjectStatus();
   const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -250,8 +269,12 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
                   <button
                     key={status}
                     onClick={() => {
-                      handleUpdateProjectStatus(column.id, status);
+                      // Update local state immediately for instant UI feedback
+                      setCurrentProjectStatus(status);
+                      setLastClientUpdate(Date.now());
                       setShowStatusDropdown(false);
+                      // Then call the handler
+                      handleUpdateProjectStatus(column.id, status);
                     }}
                     className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-md last:rounded-b-md ${statusColors[status]}`}
                   >
@@ -263,47 +286,55 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
           </div>
           
           {/* More Options Button */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenDropdownId(openDropdownId === column.id ? null : column.id)}
-              className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <LucideMoreHorizontal className="w-4 h-4" />
-            </button>
-          {openDropdownId === column.id && (
-            <div className={`absolute right-0 mt-1 w-32 rounded-md shadow-lg z-10 ${isDarkMode ? 'bg-gray-700' : 'bg-white'} border ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+          <RoleGuard requiredPermission="projects.delete" facilityId={facilityId}>
+            <div className="relative">
               <button
-                onClick={() => handleArchiveProject(column.id, column.title)}
-                className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                onClick={() => setOpenDropdownId(openDropdownId === column.id ? null : column.id)}
+                className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <LucideArchive className="w-4 h-4 inline mr-2" />
-                Archive
+                <LucideMoreHorizontal className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => handleDeleteProject(column.id, column.title)}
-                className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-red-600 dark:text-red-400`}
-              >
-                <LucideTrash2 className="w-4 h-4 inline mr-2" />
-                Delete
-              </button>
+            {openDropdownId === column.id && (
+              <div className={`absolute right-0 mt-1 w-32 rounded-md shadow-lg z-10 ${isDarkMode ? 'bg-gray-700' : 'bg-white'} border ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                <RoleGuard requiredPermission="projects.archive" facilityId={facilityId}>
+                  <button
+                    onClick={() => handleArchiveProject(column.id, column.title)}
+                    className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                  >
+                    <LucideArchive className="w-4 h-4 inline mr-2" />
+                    Archive
+                  </button>
+                </RoleGuard>
+                <RoleGuard requiredPermission="projects.delete" facilityId={facilityId}>
+                  <button
+                    onClick={() => handleDeleteProject(column.id, column.title)}
+                    className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-red-600 dark:text-red-400`}
+                  >
+                    <LucideTrash2 className="w-4 h-4 inline mr-2" />
+                    Delete
+                  </button>
+                </RoleGuard>
+              </div>
+            )}
             </div>
-          )}
-          </div>
+          </RoleGuard>
         </div>
       </div>
 
       {/* Add Task Button */}
-      <button
-        onClick={() => handleCreateTask(column.id)}
-        className={`w-full mb-3 p-1.5 rounded-md text-sm flex items-center space-x-2 transition-colors ${
-          isDarkMode
-            ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-300'
-            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-        }`}
-      >
-        <LucidePlus className="w-4 h-4" />
-        <span>Add task</span>
-      </button>
+      <RoleGuard requiredPermission="tasks.create" facilityId={facilityId}>
+        <button
+          onClick={() => handleCreateTask(column.id)}
+          className={`w-full mb-3 p-1.5 rounded-md text-sm flex items-center space-x-2 transition-colors ${
+            isDarkMode
+              ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+              : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+          }`}
+        >
+          <LucidePlus className="w-4 h-4" />
+          <span>Add task</span>
+        </button>
+      </RoleGuard>
 
       {/* Tasks - Scrollable */}
       <div className="overflow-y-auto project-column-scroll">

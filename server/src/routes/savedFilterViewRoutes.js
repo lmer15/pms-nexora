@@ -10,7 +10,7 @@ const {
   getDefaultFilterView
 } = require('../controllers/savedFilterViewController');
 const authenticateToken = require('../middleware/authMiddleware');
-const { validateSavedFilterView } = require('../middleware/validationMiddleware');
+const { validateSavedFilterView, validateSavedFilterViewUpdate } = require('../middleware/validationMiddleware');
 
 // Apply authentication middleware to all routes
 router.use(authenticateToken);
@@ -28,7 +28,7 @@ router.get('/:id', getSavedFilterView);
 router.post('/', validateSavedFilterView, createSavedFilterView);
 
 // Update a saved filter view
-router.put('/:id', validateSavedFilterView, updateSavedFilterView);
+router.put('/:id', validateSavedFilterViewUpdate, updateSavedFilterView);
 
 // Set a filter view as default
 router.patch('/:id/default', setAsDefault);

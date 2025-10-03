@@ -297,12 +297,12 @@ const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({ taskId, isOpen, onC
     <>
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/20 z-40 transition-opacity duration-300"
+        className="fixed inset-0 bg-black/20 z-[1000] transition-opacity duration-300"
         onClick={closeDrawer}
       />
       
       {/* Drawer */}
-      <div className={`fixed right-0 top-0 h-full w-full max-w-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+      <div className={`fixed right-0 top-0 h-full w-full max-w-2xl z-[1001] transform transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       } ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} shadow-2xl`}>
         <div className="flex flex-col h-full">

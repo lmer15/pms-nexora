@@ -31,7 +31,7 @@ exports.firebaseRegister = async (req, res) => {
       isEmailVerified: false
     });
 
-    // Generate JWT token
+    // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
     res.status(201).json({
@@ -96,7 +96,7 @@ exports.firebaseGoogleAuth = async (req, res) => {
       }
     }
 
-    // Generate JWT token
+    // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
     res.json({
@@ -148,7 +148,7 @@ exports.firebaseVerify = async (req, res) => {
     }
     await User.update(user.id, updateData);
 
-    // Generate JWT token
+    // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
     res.json({
@@ -214,7 +214,7 @@ exports.firebaseSync = async (req, res) => {
       }
     }
 
-    // Generate JWT token
+    // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
     res.json({

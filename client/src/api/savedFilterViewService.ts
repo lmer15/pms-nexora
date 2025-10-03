@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
+import api from './api';
 
 export interface SavedFilterView {
   id: string;
@@ -44,16 +43,12 @@ export interface UpdateSavedFilterViewData {
 }
 
 class SavedFilterViewService {
-  private baseURL = `${API_BASE_URL}/savedFilterViews`;
+  private baseURL = '/savedFilterViews';
 
   // Get all saved filter views for a user in a facility
   async getByFacility(facilityId: string): Promise<SavedFilterView[]> {
     try {
-      const response = await axios.get(`${this.baseURL}/facility/${facilityId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.get(`${this.baseURL}/facility/${facilityId}`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching saved filter views:', error);
@@ -64,11 +59,7 @@ class SavedFilterViewService {
   // Get a specific saved filter view by ID
   async getById(id: string): Promise<SavedFilterView> {
     try {
-      const response = await axios.get(`${this.baseURL}/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.get(`${this.baseURL}/${id}`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching saved filter view:', error);
@@ -79,11 +70,7 @@ class SavedFilterViewService {
   // Get default filter view for a user in a facility
   async getDefaultByFacility(facilityId: string): Promise<SavedFilterView | null> {
     try {
-      const response = await axios.get(`${this.baseURL}/facility/${facilityId}/default`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.get(`${this.baseURL}/facility/${facilityId}/default`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching default filter view:', error);
@@ -94,12 +81,7 @@ class SavedFilterViewService {
   // Create a new saved filter view
   async create(data: CreateSavedFilterViewData): Promise<SavedFilterView> {
     try {
-      const response = await axios.post(this.baseURL, data, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.post(this.baseURL, data);
       return response.data.data;
     } catch (error) {
       console.error('Error creating saved filter view:', error);
@@ -110,12 +92,7 @@ class SavedFilterViewService {
   // Update a saved filter view
   async update(id: string, data: UpdateSavedFilterViewData): Promise<SavedFilterView> {
     try {
-      const response = await axios.put(`${this.baseURL}/${id}`, data, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.put(`${this.baseURL}/${id}`, data);
       return response.data.data;
     } catch (error) {
       console.error('Error updating saved filter view:', error);
@@ -126,11 +103,7 @@ class SavedFilterViewService {
   // Set a filter view as default
   async setAsDefault(id: string): Promise<SavedFilterView> {
     try {
-      const response = await axios.patch(`${this.baseURL}/${id}/default`, {}, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.patch(`${this.baseURL}/${id}/default`, {});
       return response.data.data;
     } catch (error) {
       console.error('Error setting filter view as default:', error);
@@ -141,11 +114,7 @@ class SavedFilterViewService {
   // Delete a saved filter view
   async delete(id: string): Promise<void> {
     try {
-      await axios.delete(`${this.baseURL}/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      await api.delete(`${this.baseURL}/${id}`);
     } catch (error) {
       console.error('Error deleting saved filter view:', error);
       throw error;

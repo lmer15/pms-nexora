@@ -89,12 +89,15 @@ class UserFacility extends FirestoreService {
 
   // Update user role in facility
   async updateUserRole(relationshipId, role) {
-    const validRoles = ['owner', 'admin', 'member'];
+    const validRoles = ['owner', 'manager', 'member', 'guest'];
     if (!validRoles.includes(role)) {
       throw new Error('Invalid role');
     }
 
-    const result = await this.update(relationshipId, { role });
+    const result = await this.update(relationshipId, { 
+      role,
+      updatedAt: new Date().toISOString()
+    });
     
     // Invalidate cache for the user and facility
     const cacheService = require('../services/cacheService');

@@ -27,6 +27,8 @@ export interface Column {
   id: string;
   title: string;
   tasks: Task[];
+  _projectStatus?: string;
+  status?: string;
 }
 
 export interface Facility {

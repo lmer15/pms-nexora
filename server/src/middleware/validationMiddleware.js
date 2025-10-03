@@ -32,7 +32,6 @@ const validate = (schema, property = 'body') => {
       });
     }
 
-    // Replace the original data with validated and sanitized data
     req[property] = { ...data, ...result };
     next();
   };
@@ -273,9 +272,9 @@ const schemas = {
         
         const validFilterKeys = ['searchTerm', 'filter', 'assigneeFilter', 'tagFilter', 'priorityFilter'];
         const validFilterValues = {
-          filter: ['all', 'todo', 'in-progress', 'review', 'done'],
-          assigneeFilter: ['all'], // Will be populated with actual assignee names
-          tagFilter: ['all'], // Will be populated with actual tags
+          filter: ['all', 'todo', 'in-progress', 'review', 'done', 'completed', 'active', 'with-tasks', 'empty'],
+          assigneeFilter: ['all'], // Allow any string value for assignee names
+          tagFilter: ['all'], // Allow any string value for tag names
           priorityFilter: ['all', 'low', 'medium', 'high', 'urgent']
         };
 
@@ -287,6 +286,11 @@ const schemas = {
           if (key === 'searchTerm') {
             if (typeof val !== 'string') {
               return { error: { details: [{ message: 'searchTerm must be a string' }] } };
+            }
+          } else if (key === 'assigneeFilter' || key === 'tagFilter') {
+            // Allow any string value for assignee and tag filters
+            if (typeof val !== 'string') {
+              return { error: { details: [{ message: `${key} must be a string` }] } };
             }
           } else if (key !== 'searchTerm' && validFilterValues[key]) {
             if (!validFilterValues[key].includes(val)) {
@@ -305,6 +309,76 @@ const schemas = {
         return { value };
       }
     }
+  },
+
+  savedFilterViewUpdate: {
+    name: { 
+      required: false,
+      validate: (value) => {
+        if (value === undefined || value === null) return { value: undefined };
+        if (typeof value !== 'string') return { error: { details: [{ message: 'Must be a string' }] } };
+        const trimmed = value.trim();
+        if (trimmed.length < 1) return { error: { details: [{ message: 'Name cannot be empty' }] } };
+        if (trimmed.length > 50) return { error: { details: [{ message: 'Name must be less than 50 characters' }] } };
+        return { value: trimmed };
+      }
+    },
+    facilityId: { 
+      required: false,
+      validate: (value) => {
+        if (value === undefined || value === null) return { value: undefined };
+        if (typeof value !== 'string') return { error: { details: [{ message: 'Must be a string' }] } };
+        if (value.trim().length < 1) return { error: { details: [{ message: 'Facility ID cannot be empty' }] } };
+        return { value: value.trim() };
+      }
+    },
+    filters: { 
+      required: false,
+      validate: (value) => {
+        if (value === undefined || value === null) return { value: undefined };
+        if (typeof value !== 'object' || value === null) {
+          return { error: { details: [{ message: 'Filters must be an object' }] } };
+        }
+        
+        const validFilterKeys = ['searchTerm', 'filter', 'assigneeFilter', 'tagFilter', 'priorityFilter'];
+        const validFilterValues = {
+          filter: ['all', 'todo', 'in-progress', 'review', 'done', 'completed', 'active', 'with-tasks', 'empty'],
+          assigneeFilter: ['all'], // Allow any string value for assignee names
+          tagFilter: ['all'], // Allow any string value for tag names
+          priorityFilter: ['all', 'low', 'medium', 'high', 'urgent']
+        };
+
+        for (const [key, val] of Object.entries(value)) {
+          if (!validFilterKeys.includes(key)) {
+            return { error: { details: [{ message: `Invalid filter key: ${key}` }] } };
+          }
+
+          if (key === 'searchTerm') {
+            if (typeof val !== 'string') {
+              return { error: { details: [{ message: 'searchTerm must be a string' }] } };
+            }
+          } else if (key === 'assigneeFilter' || key === 'tagFilter') {
+            // Allow any string value for assignee and tag filters
+            if (typeof val !== 'string') {
+              return { error: { details: [{ message: `${key} must be a string` }] } };
+            }
+          } else if (key !== 'searchTerm' && validFilterValues[key]) {
+            if (!validFilterValues[key].includes(val)) {
+              return { error: { details: [{ message: `Invalid value for ${key}: ${val}` }] } };
+            }
+          }
+        }
+
+        return { value };
+      }
+    },
+    isDefault: { 
+      validate: (value) => {
+        if (value === undefined || value === null) return { value: undefined };
+        if (typeof value !== 'boolean') return { error: { details: [{ message: 'Must be a boolean' }] } };
+        return { value };
+      }
+    }
   }
 };
 
@@ -313,6 +387,7 @@ const validateTask = validate(schemas.task);
 const validateTaskUpdate = validate(schemas.taskUpdate);
 const validateProjectUpdate = validate(schemas.projectUpdate);
 const validateSavedFilterView = validate(schemas.savedFilterView);
+const validateSavedFilterViewUpdate = validate(schemas.savedFilterViewUpdate);
 const validatePagination = validate(schemas.pagination, 'query');
 
 // Sanitization middleware
@@ -391,6 +466,7 @@ module.exports = {
   validateTaskUpdate,
   validateProjectUpdate,
   validateSavedFilterView,
+  validateSavedFilterViewUpdate,
   validatePagination,
   sanitizeInput,
   rateLimit,

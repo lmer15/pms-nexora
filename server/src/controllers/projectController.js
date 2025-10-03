@@ -100,12 +100,15 @@ exports.createProject = async (req, res) => {
 
 exports.updateProject = async (req, res) => {
   try {
-    console.log('Project update request:', { id: req.params.id, body: req.body });
     const updatedProject = await Project.update(req.params.id, req.body);
-    console.log('Project updated successfully:', updatedProject);
     if (!updatedProject) {
       return res.status(404).json({ message: 'Project not found' });
     }
+    
+    const cacheService = require('../services/cacheService');
+    cacheService.invalidateFacilityProjects(updatedProject.facilityId);
+    cacheService.invalidateFacilityStats(updatedProject.facilityId);
+    
     res.json(updatedProject);
   } catch (error) {
     console.error('Error updating project:', error);

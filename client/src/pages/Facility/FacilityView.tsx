@@ -15,6 +15,9 @@ import KanbanBoard from './components/KanbanBoard';
 import ListView from './components/ListView';
 import CalendarView from './components/CalendarView';
 import TimelineView from './components/TimelineView';
+import RoleManagementModal from '../../components/RoleManagementModal';
+import RoleIndicator from '../../components/RoleIndicator';
+import { RoleGuard, usePermissions } from '../../components/RoleGuard';
 import { useOptimizedProjectManagement } from '../../hooks/useOptimizedProjectManagement';
 import { useTaskManagement } from '../../hooks/useTaskManagement';
 import { taskService } from '../../api/taskService';
@@ -57,6 +60,12 @@ const FacilityView: React.FC = () => {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'calendar' | 'timeline'>('kanban');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [showRoleManagement, setShowRoleManagement] = useState(false);
+  const [availableAssignees, setAvailableAssignees] = useState<Array<{id: string, name: string, email?: string, profilePicture?: string}>>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+
+  const { canManageUsers } = usePermissions(id);
 
   const handleOpenTaskDetail = (taskId: string) => {
     setSelectedTaskId(taskId);
@@ -66,8 +75,33 @@ const FacilityView: React.FC = () => {
   // Handle project status update
   const handleUpdateProjectStatus = async (projectId: string, newStatus: string) => {
     try {
-      await projectService.update(projectId, { status: newStatus as any });
+      // Update UI immediately (optimistic update)
+      setColumns(prevColumns => 
+        prevColumns.map(col => 
+          col.id === projectId 
+            ? { ...col, _status: newStatus, _projectStatus: newStatus, status: newStatus } // Add temporary status for UI
+            : col
+        )
+      );
+      
+      const updatedProject = await projectService.update(projectId, { status: newStatus as any });
+      
+      setProjects(prevProjects => 
+        prevProjects.map(project => 
+          project.id === projectId ? updatedProject : project
+        )
+      );
+      
+      // Update columns state with the server response
+      setColumns(prevColumns => 
+        prevColumns.map(col => 
+          col.id === projectId 
+            ? { ...col, _status: undefined, _projectStatus: updatedProject.status, status: updatedProject.status }
+            : col
+        )
+      );
     
+      // When project is marked as completed, automatically mark all tasks as done
       if (newStatus === 'completed') {
         const projectTasks = columns
           .find(col => col.id === projectId)?.tasks || [];
@@ -77,16 +111,47 @@ const FacilityView: React.FC = () => {
           .map(task => task.id);
         
         if (taskIdsToUpdate.length > 0) {
-          await taskService.bulkUpdateStatus(taskIdsToUpdate, 'done');
+          try {
+            await taskService.bulkUpdateStatus(taskIdsToUpdate, 'done');
+            
+            // Update local task states
+            setColumns(prevColumns => 
+              prevColumns.map(col => 
+                col.id === projectId 
+                  ? {
+                      ...col,
+                      tasks: col.tasks.map(task => 
+                        taskIdsToUpdate.includes(task.id) 
+                          ? { ...task, status: 'done' as any }
+                          : task
+                      )
+                    }
+                  : col
+              )
+            );
+            
+            // Show notification about automatic task completion
+            if (taskIdsToUpdate.length > 0) {
+              setShowNotification(true);
+            }
+          } catch (error) {
+            console.error('Error updating tasks to done status:', error);
+          }
         }
       }
-      
-      // Refresh the data
-      await loadFacilityData();
       
     } catch (error) {
       console.error('Error updating project status:', error);
       setError('Failed to update project status');
+      
+      // Revert optimistic update on error
+      setColumns(prevColumns => 
+        prevColumns.map(col => 
+          col.id === projectId 
+            ? { ...col, _status: undefined, _projectStatus: col._projectStatus }
+            : col
+        )
+      );
     }
   };
 
@@ -105,7 +170,6 @@ const FacilityView: React.FC = () => {
       const sourceColumnIndex = newColumns.findIndex(col => col.id === fromColumnId);
       const targetColumnIndex = newColumns.findIndex(col => col.id === toColumnId);
       
-      
       if (sourceColumnIndex === -1 || targetColumnIndex === -1) {
         return prevColumns;
       }
@@ -113,33 +177,25 @@ const FacilityView: React.FC = () => {
       const sourceColumn = newColumns[sourceColumnIndex];
       const taskIndex = sourceColumn.tasks.findIndex(task => task.id === taskId);
       
-      
       if (taskIndex === -1) {
         return prevColumns;
       }
 
       const [movedTask] = sourceColumn.tasks.splice(taskIndex, 1);
-
       const updatedTask = { ...movedTask, projectId: toColumnId };
+      
       const targetColumn = newColumns[targetColumnIndex];
       targetColumn.tasks.splice(newIndex, 0, updatedTask);
       
       return newColumns;
     });
     try {
-      const updatedTask = await taskService.update(taskId, { projectId: toColumnId });
-
-      cacheService.invalidateProject(fromColumnId);
-      cacheService.invalidateProject(toColumnId);
-      
+      await taskService.update(taskId, { projectId: toColumnId });
       setShowTaskMoveNotification(true);
     } catch (error) {
       console.error('Failed to move task:', error);
-      console.error('Error details:', error.response?.data || error.message);
-      setColumns(prevColumns => {
-        loadColumnsForProject(projects);
-        return prevColumns;
-      });
+      // Revert optimistic update on error
+      loadFacilityData();
     }
   };
 
@@ -239,6 +295,7 @@ const FacilityView: React.FC = () => {
   // Use custom hooks for project and task management
   const {
     projects,
+    setProjects,
     columns,
     setColumns,
     loadProjects,
@@ -278,7 +335,6 @@ const FacilityView: React.FC = () => {
     handleDeleteTask: originalHandleDeleteTask,
   } = useTaskManagement(columns, setColumns, () => setShowNotification(true));
 
-  // Auto-update project status based on task completion
   useEffect(() => {
     const updateProjectStatuses = async () => {
       for (const column of columns) {
@@ -288,20 +344,33 @@ const FacilityView: React.FC = () => {
         const completedTasks = projectTasks.filter(task => task.status === 'done').length;
         const totalTasks = projectTasks.length;
         
-        let newStatus = 'planning';
-        if (completedTasks === totalTasks) {
-          newStatus = 'completed';
-        } else if (completedTasks > 0) {
-          newStatus = 'in-progress';
-        }
-
-        // Only update if status has changed
-        const currentProject = projects.find(p => p.id === column.id);
-        if (currentProject && currentProject.status !== newStatus) {
-          try {
-            await projectService.update(column.id, { status: newStatus as any });
-          } catch (error) {
-            console.error(`Error auto-updating project ${column.id} status:`, error);
+        // Only auto-complete if ALL tasks are done
+        if (completedTasks === totalTasks && totalTasks > 0) {
+          const currentProject = projects.find(p => p.id === column.id);
+          if (currentProject && currentProject.status !== 'completed') {
+            try {
+              await projectService.update(column.id, { status: 'completed' as any });
+              
+              // Update local state
+              setProjects(prevProjects => 
+                prevProjects.map(project => 
+                  project.id === column.id ? { ...project, status: 'completed' } : project
+                )
+              );
+              
+              setColumns(prevColumns => 
+                prevColumns.map(col => 
+                  col.id === column.id 
+                    ? { ...col, _projectStatus: 'completed', status: 'completed' }
+                    : col
+                )
+              );
+              
+              // Show notification about automatic project completion
+              setShowNotification(true);
+            } catch (error) {
+              console.error(`Error auto-completing project ${column.id}:`, error);
+            }
           }
         }
       }
@@ -325,8 +394,6 @@ const FacilityView: React.FC = () => {
   }, [id]);
 
   // Collect available assignees from facility members
-  const [availableAssignees, setAvailableAssignees] = useState<Array<{id: string, name: string, email?: string, profilePicture?: string}>>([]);
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   // Fetch facility members for assignee filter
   useEffect(() => {
@@ -403,10 +470,12 @@ const FacilityView: React.FC = () => {
       if (filter !== 'all') {
         switch (filter) {
           case 'active':
-            statusMatches = true;
+            const activeProject = projects.find(p => p.id === column.id);
+            statusMatches = activeProject?.status !== 'completed';
             break;
           case 'completed':
-            statusMatches = false;
+            const project = projects.find(p => p.id === column.id);
+            statusMatches = project?.status === 'completed';
             break;
           case 'with-tasks':
             statusMatches = column.tasks.length > 0;
@@ -629,12 +698,26 @@ const FacilityView: React.FC = () => {
       );
     };
 
+    const handleTaskCreated = (event: CustomEvent) => {
+      const newTask = event.detail;
+      setColumns(prevColumns =>
+        prevColumns.map(column => ({
+          ...column,
+          tasks: column.id === newTask.projectId 
+            ? [...column.tasks, { ...newTask, _clientUpdatedAt: Date.now() }]
+            : column.tasks
+        }))
+      );
+    };
+
     window.addEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
     window.addEventListener('taskDeleted', handleTaskDeleted as EventListener);
+    window.addEventListener('taskCreated', handleTaskCreated as EventListener);
 
     return () => {
       window.removeEventListener('taskUpdated', handleTaskUpdated as unknown as EventListener);
       window.removeEventListener('taskDeleted', handleTaskDeleted as EventListener);
+      window.removeEventListener('taskCreated', handleTaskCreated as EventListener);
     };
   }, []);
 
@@ -671,6 +754,7 @@ const FacilityView: React.FC = () => {
         memberCount={facilityStats?.memberCount || 0}
         filteredProjectsCount={filteredColumns.length}
         searchTerm={searchTerm}
+        onManageRoles={() => setShowRoleManagement(true)}
         setSearchTerm={setSearchTerm}
         filter={filter}
         setFilter={setFilter}
@@ -685,6 +769,7 @@ const FacilityView: React.FC = () => {
         priorityFilter={priorityFilter}
         setPriorityFilter={setPriorityFilter}
         availableAssignees={availableAssignees}
+        availableTags={availableTags.map(tag => ({ id: tag, name: tag, color: '#3b82f6' }))}
         projects={columns.map(col => ({
           id: col.id,
           title: col.title,
@@ -724,11 +809,13 @@ const FacilityView: React.FC = () => {
           setTagFilter(filters.tagFilter);
           setPriorityFilter(filters.priorityFilter);
         }}
+        isCollapsed={isHeaderCollapsed}
+        onToggleCollapse={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
       />
 
 
       {/* View Content with Enhanced Transitions */}
-      <div className="flex-1 flex flex-col min-h-0 relative">
+      <div className="flex-1 flex flex-col min-h-0 relative" style={{ zIndex: 1 }}>
         {/* Kanban View */}
         <div className={`
           absolute inset-0 transition-all duration-300 ease-in-out
@@ -791,6 +878,7 @@ const FacilityView: React.FC = () => {
             <ListView
               columns={filteredColumns}
               isDarkMode={isDarkMode}
+              facilityId={facility?.id}
               onTaskClick={handleOpenTaskDetail}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDeleteClick}
@@ -811,6 +899,7 @@ const FacilityView: React.FC = () => {
             <CalendarView
               columns={filteredColumns}
               isDarkMode={isDarkMode}
+              facilityId={facility?.id}
               onTaskClick={handleOpenTaskDetail}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDeleteClick}
@@ -830,6 +919,7 @@ const FacilityView: React.FC = () => {
             <TimelineView
               columns={filteredColumns}
               isDarkMode={isDarkMode}
+              facilityId={facility?.id}
               onTaskClick={handleOpenTaskDetail}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDeleteClick}
@@ -937,6 +1027,14 @@ const FacilityView: React.FC = () => {
         onAssigneeFilter={setAssigneeFilter}
         onTagFilter={setTagFilter}
         onPriorityFilter={setPriorityFilter}
+      />
+
+      {/* Role Management Modal */}
+      <RoleManagementModal
+        isOpen={showRoleManagement}
+        onClose={() => setShowRoleManagement(false)}
+        facilityId={facility?.id || ''}
+        isDarkMode={isDarkMode}
       />
     </div>
   );

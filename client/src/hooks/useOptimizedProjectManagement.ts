@@ -75,9 +75,7 @@ export const useOptimizedProjectManagement = (
     if (!newName.trim()) return;
     
     try {
-      console.log('Updating project name:', { projectId, newName });
       const updatedProject = await projectService.update(projectId, { name: newName.trim() });
-      console.log('Updated project received:', updatedProject);
       
       setProjects(prev => prev.map(p => 
         p.id === projectId ? updatedProject : p
@@ -126,22 +124,20 @@ export const useOptimizedProjectManagement = (
     
     setIsLoading(true);
     try {
-      // Use the optimized endpoint to get all data in one request
       const data = await facilityService.getWithData(facilityId, true);
       
-      
       setProjects(data.projects);
-      
-      // Convert projects to columns format
+
       const newColumns: Column[] = data.projects.map(project => ({
         id: project.id,
         title: project.name,
+        _projectStatus: project.status,
+        status: project.status, // Add the actual status property
         tasks: (project.tasks || []).map(task => ({
           ...task,
-          creatorId: (task as any).creatorId || task.assigneeId || '', // Add missing creatorId field
-          status: task.status as 'todo' | 'in-progress' | 'review' | 'done', // Cast status to correct type
-          priority: task.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined, // Cast priority to correct type
-          // Preserve assignee information for avatar display
+          creatorId: (task as any).creatorId || task.assigneeId || '', 
+          status: task.status as 'todo' | 'in-progress' | 'review' | 'done', 
+          priority: task.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined, 
           assigneeName: (task as any).assigneeName,
           assigneeProfilePicture: (task as any).assigneeProfilePicture
         }))
@@ -174,6 +170,8 @@ export const useOptimizedProjectManagement = (
         return {
           id: project.id,
           title: project.name,
+          _projectStatus: project.status, // Include project status in column
+          status: project.status, // Also include as direct status field
           tasks: tasks.map(task => ({
             ...task,
             // Ensure assignee information is preserved
@@ -186,6 +184,8 @@ export const useOptimizedProjectManagement = (
         return {
           id: project.id,
           title: project.name,
+          _projectStatus: project.status, // Include project status in column
+          status: project.status, // Also include as direct status field
           tasks: [],
         };
       }
@@ -205,6 +205,7 @@ export const useOptimizedProjectManagement = (
 
   return {
     projects,
+    setProjects,
     columns,
     setColumns,
     loadProjects,

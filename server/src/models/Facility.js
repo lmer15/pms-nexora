@@ -22,6 +22,8 @@ class Facility extends FirestoreService {
       }
 
       const UserFacility = require('./UserFacility');
+      
+      // userId is now the database user ID from JWT token
       const userFacilities = await UserFacility.findByUser(userId);
       
       if (userFacilities.length === 0) {

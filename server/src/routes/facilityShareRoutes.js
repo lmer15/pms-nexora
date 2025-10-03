@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { canManageMembers } = require('../middleware/facilityRoleMiddleware');
 const {
   searchUsers,
   sendInvitation,
-  getFacilityMembers,
-  updateMemberRole,
-  removeMember,
   generateShareLink,
   getShareLink,
   updateShareLinkRole,
@@ -25,10 +23,6 @@ const {
 // User search route (for invitations)
 router.get('/search/users', authMiddleware, searchUsers);
 
-// Member management routes
-router.get('/:facilityId/members', authMiddleware, getFacilityMembers);
-router.put('/:facilityId/members/role', authMiddleware, updateMemberRole);
-router.delete('/:facilityId/members', authMiddleware, removeMember);
 router.post('/:facilityId/leave', authMiddleware, leaveFacility);
 
 // Invitation routes

@@ -47,10 +47,7 @@ export const FacilityProvider: React.FC<FacilityProviderProps> = ({ children }) 
       setError(null);
       
       const data = await facilityService.getAll();
-      
       setFacilities(data);
-      
-      // Set first facility as current if none is selected
       if (data.length > 0) {
         setCurrentFacility(prev => prev || data[0]);
       } else {

@@ -22,6 +22,7 @@ const {
   searchUsers,
   sendInvitation,
   getFacilityMembers,
+  getUserRole,
   getFacilityStats,
   getFacilityTags,
   updateMemberRole,
@@ -61,8 +62,14 @@ router.delete('/:id', authMiddleware, deleteFacility);
 
 // Member management routes
 router.get('/:facilityId/members', authMiddleware, canViewFacility, getFacilityMembers);
+router.get('/:facilityId/user-role', authMiddleware, getUserRole);
 router.get('/:facilityId/stats', authMiddleware, canViewFacility, getFacilityStats);
 router.get('/:facilityId/tags', authMiddleware, canViewFacility, getFacilityTags);
+// Test route to verify routing is working
+router.get('/:facilityId/test-route', (req, res) => {
+  res.json({ message: 'Test route is working', facilityId: req.params.facilityId });
+});
+
 router.put('/:facilityId/members/role', authMiddleware, canManageMembers, validateRole, canUpdateMemberRole, updateMemberRole);
 router.delete('/:facilityId/members', authMiddleware, canManageMembers, removeMember);
 router.post('/:facilityId/leave', authMiddleware, canViewFacility, leaveFacility);

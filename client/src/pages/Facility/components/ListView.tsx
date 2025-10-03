@@ -1,15 +1,19 @@
 import React, { useState, useMemo, useEffect } from 'react'; // React hooks
 import { Column, Task } from '../types';
-import { LucideChevronDown, LucideChevronRight, LucidePlus, LucideMoreHorizontal, LucideClock, LucideList } from 'lucide-react';
+import { LucideChevronDown, LucideChevronRight, LucidePlus, LucideMoreHorizontal, LucideClock, LucideList, LucideEdit3, LucideArchive, LucideTrash2 } from 'lucide-react';
 import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import { useAuth } from '../../../context/AuthContext';
 import { taskService } from '../../../api/taskService';
+import { facilityService } from '../../../api/facilityService';
 import cacheService from '../../../services/cacheService';
 import Tooltip from '../../../components/ui/Tooltip';
+import TaskCreationModal from '../../../components/TaskCreationModal';
+import { RoleGuard, usePermissions } from '../../../components/RoleGuard';
 
 interface ListViewProps {
   columns: Column[];
   isDarkMode: boolean;
+  facilityId?: string;
   onTaskClick: (taskId: string) => void;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskDelete: (taskId: string, taskTitle: string, columnId: string) => void;
@@ -26,37 +30,62 @@ interface FlattenedTask extends Task {
 const ListView: React.FC<ListViewProps> = ({
   columns,
   isDarkMode,
+  facilityId,
   onTaskClick,
   onTaskUpdate,
   onTaskDelete,
   onTaskMove,
 }) => {
-  const { userProfileRefreshTrigger } = useFacilityRefresh();
+  const { memberRefreshTriggers, userProfileRefreshTrigger } = useFacilityRefresh();
   const { user } = useAuth();
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const { hasPermission } = usePermissions(facilityId);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>('');
   const [sortBy, setSortBy] = useState<keyof FlattenedTask>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState<'project' | 'status' | 'assignee' | 'priority' | 'none'>('project');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [localColumns, setLocalColumns] = useState<Column[]>(columns);
-  const [assigneeProfiles, setAssigneeProfiles] = useState<Record<string, {firstName: string; lastName: string; profilePicture?: string}>>({});
+  const [facilityMembers, setFacilityMembers] = useState<Record<string, {name: string; profilePicture?: string}>>({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [showGroupActions, setShowGroupActions] = useState<string | null>(null);
   const [showAddTaskModal, setShowAddTaskModal] = useState<string | null>(null);
+  const [modalPosition, setModalPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [taskSubtasks, setTaskSubtasks] = useState<Record<string, any[]>>({});
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  const [subtaskProgress, setSubtaskProgress] = useState({ loaded: 0, total: 0 });
   const [loadedSubtasks, setLoadedSubtasks] = useState<Set<string>>(new Set());
   const [creatingTask, setCreatingTask] = useState<string | null>(null);
   const [performingAction, setPerformingAction] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+    type: 'warning' | 'danger' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    onConfirm: () => {},
+    type: 'info'
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (showGroupActions) {
-        setShowGroupActions(null);
+        const target = event.target as Element;
+        // Don't close if clicking inside the dropdown or the ellipsis button
+        if (!target.closest('[data-dropdown]') && !target.closest('[data-ellipsis]')) {
+          setShowGroupActions(null);
+        }
       }
     };
 
@@ -74,118 +103,162 @@ const ListView: React.FC<ListViewProps> = ({
     setLocalColumns(columns);
   }, [columns]);
 
-  // Fetch assignee profiles for all tasks
+  // Fetch facility members for all tasks
   useEffect(() => {
-    const fetchAllAssigneeProfiles = async () => {
-      if (localColumns.length === 0) return;
+    const fetchFacilityMembers = async () => {
+      if (!facilityId || localColumns.length === 0) return;
       
       setLoadingProfiles(true);
       try {
-        // Collect all unique assignee IDs from all tasks
-        const allAssigneeIds = new Set<string>();
-        localColumns.forEach(column => {
-          column.tasks.forEach(task => {
-            // Handle both assignees and assigneeIds fields
-            const assignees = task.assignees || (task as any).assigneeIds || [];
-            assignees.forEach((assignee: any) => {
-              const id = typeof assignee === 'string' ? assignee : assignee.id;
-              if (id) allAssigneeIds.add(id);
-            });
-          });
+        const members = await facilityService.getFacilityMembers(facilityId);
+        
+        // Convert members array to a lookup object
+        const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
+        members.forEach(member => {
+          membersLookup[member.id] = {
+            name: member.name,
+            profilePicture: member.profilePicture
+          };
         });
         
-        const assigneeIds = Array.from(allAssigneeIds);
-        
-        if (assigneeIds.length > 0) {
-          // Invalidate cache if user profile refresh was triggered
-          if (userProfileRefreshTrigger > 0) {
-            cacheService.invalidateUserProfiles(assigneeIds);
-          }
-          
-          const profiles = await taskService.fetchUserProfilesByIds(assigneeIds);
-          setAssigneeProfiles(profiles || {});
-        } else {
-          setAssigneeProfiles({});
-        }
+        setFacilityMembers(membersLookup);
       } catch (error) {
-        console.error('Failed to fetch assignee profiles:', error);
-        setAssigneeProfiles({});
+        console.error('Failed to fetch facility members:', error);
+        setFacilityMembers({});
       } finally {
         setLoadingProfiles(false);
       }
     };
 
-    fetchAllAssigneeProfiles();
-  }, [localColumns, userProfileRefreshTrigger]);
+    fetchFacilityMembers();
+  }, [facilityId, localColumns, memberRefreshTriggers[facilityId || '']]);
 
-  // Fetch subtasks for all tasks with smart throttling
+  // Comprehensive subtask loading with intelligent rate limiting
   useEffect(() => {
-    const fetchAllSubtasks = async () => {
+    const fetchSubtasksIntelligently = async () => {
       if (localColumns.length === 0) return;
       
-      setLoadingSubtasks(true);
-      try {
-        // Collect all unique task IDs
-        const allTaskIds = new Set<string>();
-        localColumns.forEach(column => {
-          column.tasks.forEach(task => {
+      // Collect all unique task IDs that haven't been loaded yet
+      const allTaskIds = new Set<string>();
+      localColumns.forEach(column => {
+        column.tasks.forEach(task => {
+          if (!loadedSubtasks.has(task.id)) {
             allTaskIds.add(task.id);
-          });
+          }
         });
+      });
+      
+      const taskIds = Array.from(allTaskIds);
+      if (taskIds.length === 0) return;
+      
+      setLoadingSubtasks(true);
+      setSubtaskProgress({ loaded: 0, total: taskIds.length });
+      
+      // Request queue with intelligent throttling
+      const processRequestQueue = async () => {
+        const baseDelay = 2000; // Base 2 second delay
+        const maxDelay = 10000; // Maximum 10 second delay
+        let currentDelay = baseDelay;
+        let consecutiveErrors = 0;
+        let loadedCount = 0;
         
-        const taskIds = Array.from(allTaskIds);
-        const subtasksData: Record<string, any[]> = {};
-        
-        // Process tasks in smaller batches with longer delays to avoid rate limiting
-        const batchSize = 3; // Reduced batch size
-        const delay = 500; // Increased delay between batches
-        
-        for (let i = 0; i < taskIds.length; i += batchSize) {
-          const batch = taskIds.slice(i, i + batchSize);
+        for (let i = 0; i < taskIds.length; i++) {
+          const taskId = taskIds[i];
           
-          // Process batch with retry logic
-          const batchPromises = batch.map(async (taskId) => {
-            let retries = 2; // Reduced retries
-            while (retries > 0) {
-              try {
-                const subtasks = await taskService.getSubtasks(taskId);
-                return { taskId, subtasks: subtasks || [] };
-              } catch (error) {
-                retries--;
-                if (retries === 0) {
-                  console.error(`Failed to fetch subtasks for task ${taskId} after 2 retries:`, error);
-                  return { taskId, subtasks: [] };
-                }
-                // Shorter backoff: wait 1s, 2s
-                await new Promise(resolve => setTimeout(resolve, 1000 * (3 - retries)));
-              }
+          try {
+            // Add jitter to prevent thundering herd
+            const jitter = Math.random() * 1000; // 0-1 second jitter
+            const actualDelay = currentDelay + jitter;
+            
+            if (i > 0) {
+              await new Promise(resolve => setTimeout(resolve, actualDelay));
             }
-            return { taskId, subtasks: [] };
-          });
-          
-          const batchResults = await Promise.all(batchPromises);
-          batchResults.forEach(({ taskId, subtasks }) => {
-            subtasksData[taskId] = subtasks;
+            
+            const subtasks = await taskService.getSubtasks(taskId);
+            
+            // Success - reset error handling
+            consecutiveErrors = 0;
+            currentDelay = baseDelay;
+            
+            setTaskSubtasks(prev => ({
+              ...prev,
+              [taskId]: subtasks || []
+            }));
             setLoadedSubtasks(prev => new Set([...prev, taskId]));
-          });
-          
-          // Add delay between batches to prevent rate limiting
-          if (i + batchSize < taskIds.length) {
-            await new Promise(resolve => setTimeout(resolve, delay));
+            
+            loadedCount++;
+            setSubtaskProgress({ loaded: loadedCount, total: taskIds.length });
+            
+            console.log(`✅ Loaded subtasks for task ${taskId} (${loadedCount}/${taskIds.length})`);
+            
+          } catch (error: any) {
+            consecutiveErrors++;
+            
+            // Handle different types of errors
+            if (error.response?.status === 429) {
+              // Rate limited - increase delay significantly
+              currentDelay = Math.min(currentDelay * 2, maxDelay);
+              console.warn(`⏳ Rate limited for task ${taskId}, increasing delay to ${currentDelay}ms`);
+              
+              // Add extra delay for rate limiting
+              await new Promise(resolve => setTimeout(resolve, currentDelay));
+              
+              // Retry the same task
+              i--;
+              continue;
+              
+            } else if (error.response?.status >= 500) {
+              // Server error - moderate delay
+              currentDelay = Math.min(currentDelay * 1.5, maxDelay);
+              console.warn(`🔧 Server error for task ${taskId}, retrying with delay ${currentDelay}ms`);
+              
+              // Retry the same task
+              i--;
+              continue;
+              
+            } else {
+              // Client error or other - skip this task
+              console.warn(`❌ Failed to fetch subtasks for task ${taskId}:`, error.message);
+              setTaskSubtasks(prev => ({
+                ...prev,
+                [taskId]: []
+              }));
+              setLoadedSubtasks(prev => new Set([...prev, taskId]));
+              
+              loadedCount++;
+              setSubtaskProgress({ loaded: loadedCount, total: taskIds.length });
+            }
+            
+            // If too many consecutive errors, add extra delay
+            if (consecutiveErrors >= 3) {
+              console.warn(`⚠️ Too many consecutive errors (${consecutiveErrors}), adding extra delay`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              consecutiveErrors = 0;
+            }
           }
         }
-        
-        setTaskSubtasks(subtasksData);
+      };
+      
+      try {
+        await processRequestQueue();
+        console.log(`🎉 Completed loading subtasks for ${taskIds.length} tasks`);
       } catch (error) {
-        console.error('Failed to fetch subtasks:', error);
-        setTaskSubtasks({});
+        console.error('💥 Critical error in subtask loading:', error);
       } finally {
         setLoadingSubtasks(false);
       }
     };
 
-    fetchAllSubtasks();
-  }, [localColumns]);
+    // Only fetch if we have new tasks to load
+    const hasNewTasks = localColumns.some(column => 
+      column.tasks.some(task => !loadedSubtasks.has(task.id))
+    );
+    
+    if (hasNewTasks) {
+      console.log(`🚀 Starting intelligent subtask loading for ${localColumns.reduce((acc, col) => acc + col.tasks.length, 0)} tasks`);
+      fetchSubtasksIntelligently();
+    }
+  }, [localColumns, loadedSubtasks]);
 
   // Listen for task updates to refresh assignee information
   useEffect(() => {
@@ -241,7 +314,13 @@ const ListView: React.FC<ListViewProps> = ({
 
   // Group and sort tasks
   const processedTasks = useMemo(() => {
-    let sorted = [...flattenedTasks].sort((a, b) => {
+    // First filter by status if not 'all'
+    let filtered = [...flattenedTasks];
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(task => task.status === statusFilter);
+    }
+
+    let sorted = filtered.sort((a, b) => {
       const aVal = a[sortBy] ?? '';
       const bVal = b[sortBy] ?? '';
       
@@ -250,28 +329,11 @@ const ListView: React.FC<ListViewProps> = ({
       return 0;
     });
 
-    if (groupBy === 'none') {
-      return { groups: [{ name: 'All Tasks', tasks: sorted }] };
-    }
-
+    // Always group by project, regardless of status filter
     const groups: { [key: string]: FlattenedTask[] } = {};
     
     sorted.forEach(task => {
-      let groupKey = '';
-      switch (groupBy) {
-        case 'project':
-          groupKey = task.projectName;
-          break;
-        case 'status':
-          groupKey = task.status;
-          break;
-        case 'assignee':
-          groupKey = task.assigneeName || 'Unassigned';
-          break;
-        case 'priority':
-          groupKey = task.priority || 'No Priority';
-          break;
-      }
+      const groupKey = task.projectName;
       
       if (!groups[groupKey]) {
         groups[groupKey] = [];
@@ -282,27 +344,8 @@ const ListView: React.FC<ListViewProps> = ({
     return {
       groups: Object.entries(groups).map(([name, tasks]) => ({ name, tasks }))
     };
-  }, [flattenedTasks, sortBy, sortOrder, groupBy]);
+  }, [flattenedTasks, sortBy, sortOrder, statusFilter]);
 
-  const handleSelectTask = (taskId: string) => {
-    setSelectedTasks(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(taskId)) {
-        newSet.delete(taskId);
-      } else {
-        newSet.add(taskId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedTasks.size === flattenedTasks.length) {
-      setSelectedTasks(new Set());
-    } else {
-      setSelectedTasks(new Set(flattenedTasks.map(t => t.id)));
-    }
-  };
 
   const toggleSection = (sectionName: string) => {
     setCollapsedSections(prev => {
@@ -316,23 +359,33 @@ const ListView: React.FC<ListViewProps> = ({
     });
   };
 
-  const handleBulkAction = (action: 'delete' | 'move' | 'update-status') => {
-    if (selectedTasks.size === 0) return;
-    
-    // Implement bulk actions
-    console.log(`Bulk ${action} for tasks:`, Array.from(selectedTasks));
-  };
 
-  const handleAddTask = async (groupName: string) => {
+  const handleAddTask = (groupName: string, event: React.MouseEvent) => {
     // Find the project/column for this group
     const column = localColumns.find(col => col.title === groupName);
     if (!column) return;
 
-    setCreatingTask(groupName);
+    // Calculate modal position relative to the button
+    const buttonRect = event.currentTarget.getBoundingClientRect();
+    setModalPosition({
+      top: buttonRect.bottom + window.scrollY,
+      left: buttonRect.left + window.scrollX
+    });
+
+    setShowAddTaskModal(groupName);
+  };
+
+  const handleCreateTaskFromModal = async (taskName: string) => {
+    if (!showAddTaskModal) return;
+
+    const column = localColumns.find(col => col.title === showAddTaskModal);
+    if (!column) return;
+
+    setCreatingTask(showAddTaskModal);
     try {
-      // Create a new task with default values
+      // Create a new task with the provided name
       const newTaskData = {
-        title: 'New Task',
+        title: taskName,
         description: '',
         status: 'todo' as const,
         projectId: column.id,
@@ -360,27 +413,50 @@ const ListView: React.FC<ListViewProps> = ({
       // Dispatch event to notify other components
       window.dispatchEvent(new CustomEvent('taskCreated', { detail: newTask }));
       
-      // Show success message
-      alert(`New task created successfully in ${groupName}!`);
-      
     } catch (error) {
       console.error('Failed to create task:', error);
-      alert(`Failed to create task in ${groupName}. Please try again.`);
+      alert(`Failed to create task in ${showAddTaskModal}. Please try again.`);
     } finally {
       setCreatingTask(null);
+      setShowAddTaskModal(null);
     }
   };
 
   const handleGroupActions = (groupName: string) => {
+    console.log('handleGroupActions called:', groupName);
     setShowGroupActions(showGroupActions === groupName ? null : groupName);
+  };
+
+  const showConfirmDialog = (
+    title: string,
+    message: string,
+    confirmText: string,
+    cancelText: string,
+    onConfirm: () => void,
+    type: 'warning' | 'danger' | 'info' = 'info'
+  ) => {
+    setShowConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      confirmText,
+      cancelText,
+      onConfirm,
+      type
+    });
   };
 
 
   const handleGroupAction = async (action: string, groupName: string) => {
+    console.log('handleGroupAction called:', action, groupName);
     const column = localColumns.find(col => col.title === groupName);
-    if (!column) return;
+    if (!column) {
+      console.log('Column not found:', groupName);
+      return;
+    }
 
     const taskIds = column.tasks.map(task => task.id);
+    console.log('Task IDs:', taskIds);
     if (taskIds.length === 0) {
       alert(`No tasks found in ${groupName}.`);
       setShowGroupActions(null);
@@ -390,83 +466,79 @@ const ListView: React.FC<ListViewProps> = ({
     setPerformingAction(`${action}-${groupName}`);
     try {
       switch (action) {
-        case 'bulk-edit':
-          // For now, just show a message - in a full implementation, this would open a bulk edit modal
-          alert(`Bulk edit ${taskIds.length} tasks in ${groupName}\n\nThis would open a bulk edit interface in a full implementation.`);
-          break;
           
-        case 'export':
-          // Export tasks to CSV format
-          const csvData = column.tasks.map(task => ({
-            Title: task.title,
-            Status: task.status,
-            Priority: task.priority || 'None',
-            'Due Date': task.dueDate || 'None',
-            'Created At': new Date(task.createdAt).toLocaleDateString(),
-            'Updated At': new Date(task.updatedAt).toLocaleDateString()
-          }));
-          
-          const csvContent = [
-            Object.keys(csvData[0]).join(','),
-            ...csvData.map(row => Object.values(row).map(val => `"${val}"`).join(','))
-          ].join('\n');
-          
-          const blob = new Blob([csvContent], { type: 'text/csv' });
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${groupName}_tasks_${new Date().toISOString().split('T')[0]}.csv`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-          
-          alert(`Exported ${taskIds.length} tasks from ${groupName} to CSV.`);
-          break;
           
         case 'archive':
-          if (confirm(`Are you sure you want to archive all ${taskIds.length} tasks in ${groupName}?`)) {
-            // Since there's no bulk archive API, we'll update status to 'done' as a workaround
-            await taskService.bulkUpdateStatus(taskIds, 'done');
-            
-            // Update local state
-            setLocalColumns(prevColumns =>
-              prevColumns.map(col => {
-                if (col.id === column.id) {
-                  return {
-                    ...col,
-                    tasks: col.tasks.map(task => ({ ...task, status: 'done' as const }))
-                  };
-                }
-                return col;
-              })
-            );
-            
-            alert(`Archived ${taskIds.length} tasks in ${groupName}.`);
-          }
+          showConfirmDialog(
+            'Archive All Tasks',
+            `Are you sure you want to archive all ${taskIds.length} tasks in ${groupName}?\n\nThis will mark all tasks as completed.`,
+            'Archive All',
+            'Cancel',
+            async () => {
+              // Since there's no bulk archive API, we'll update status to 'done' as a workaround
+              await taskService.bulkUpdateStatus(taskIds, 'done');
+              
+              // Update local state
+              setLocalColumns(prevColumns =>
+                prevColumns.map(col => {
+                  if (col.id === column.id) {
+                    return {
+                      ...col,
+                      tasks: col.tasks.map(task => ({ ...task, status: 'done' as const }))
+                    };
+                  }
+                  return col;
+                })
+              );
+              
+              showConfirmDialog(
+                'Success',
+                `Archived ${taskIds.length} tasks in ${groupName}.`,
+                'OK',
+                '',
+                () => {},
+                'info'
+              );
+            },
+            'warning'
+          );
           break;
           
         case 'delete-all':
-          if (confirm(`Are you sure you want to delete all ${taskIds.length} tasks in ${groupName}? This action cannot be undone.`)) {
-            // Delete tasks one by one since there's no bulk delete API
-            const deletePromises = taskIds.map(taskId => taskService.delete(taskId));
-            await Promise.all(deletePromises);
-            
-            // Update local state
-            setLocalColumns(prevColumns =>
-              prevColumns.map(col => {
-                if (col.id === column.id) {
-                  return {
-                    ...col,
-                    tasks: []
-                  };
-                }
-                return col;
-              })
-            );
-            
-            alert(`Deleted ${taskIds.length} tasks from ${groupName}.`);
-          }
+          showConfirmDialog(
+            'Delete All Tasks',
+            `Are you sure you want to delete all ${taskIds.length} tasks in ${groupName}?\n\nThis action cannot be undone and will permanently remove all tasks.`,
+            'Delete All',
+            'Cancel',
+            async () => {
+              // Delete tasks one by one since there's no bulk delete API
+              const deletePromises = taskIds.map(taskId => taskService.delete(taskId));
+              await Promise.all(deletePromises);
+              
+              // Update local state
+              setLocalColumns(prevColumns =>
+                prevColumns.map(col => {
+                  if (col.id === column.id) {
+                    return {
+                      ...col,
+                      tasks: []
+                    };
+                  }
+                  return col;
+                })
+              );
+              
+              showConfirmDialog(
+                'Success',
+                `Deleted ${taskIds.length} tasks from ${groupName}.`,
+                'OK',
+                '',
+                () => {},
+                'info'
+              );
+            },
+            'danger'
+          );
           break;
           
         default:
@@ -542,27 +614,71 @@ const ListView: React.FC<ListViewProps> = ({
       <div className="flex-1 overflow-auto">
         {/* Column Headers */}
         <div className={`sticky top-0 z-10 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          {/* Subtask Loading Progress Indicator */}
+          {loadingSubtasks && subtaskProgress.total > 0 && (
+            <div className={`px-6 py-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-blue-50'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                      Loading subtasks...
+                    </span>
+                  </div>
+                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                    {subtaskProgress.loaded} of {subtaskProgress.total} tasks
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-32 h-2 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                    <div 
+                      className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
+                      style={{ width: `${(subtaskProgress.loaded / subtaskProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                    {Math.round((subtaskProgress.loaded / subtaskProgress.total) * 100)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="flex items-center px-6 py-2">
             <div className="w-6 flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={selectedTasks.size === flattenedTasks.length && flattenedTasks.length > 0}
-                onChange={handleSelectAll}
-                className="rounded-full w-4 h-4"
-              />
+              <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center">
+                <span className="text-white text-xs font-bold">#</span>
+              </div>
             </div>
             <div className="flex-1 px-2">
               <div className="flex items-center">
                 <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Task
+                  Task:
                 </span>
-                <select className="ml-1 px-2 py-1 text-xs text-green-800 border-0 rounded-md focus:outline-none">
-                  <option value="all">All</option>
-                  <option value="todo">To Do</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="review">Review</option>
-                  <option value="done">Done</option>
-                </select>
+                <div className="relative ml-1">
+                  <select 
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                    }}
+                    className={`appearance-none px-2 py-1 pr-6 text-xs border-0 rounded-md focus:outline-none ${
+                      isDarkMode 
+                        ? 'bg-gray-700 text-gray-300' 
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    <option value="all">All</option>
+                    <option value="todo">To Do</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="review">Review</option>
+                    <option value="done">Done</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-1 pointer-events-none">
+                    <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="w-24 px-2">
@@ -609,71 +725,175 @@ const ListView: React.FC<ListViewProps> = ({
                       </div>
                     </button>
                     <div className="flex items-center space-x-1 relative">
-                      <button 
-                        onClick={() => handleAddTask(group.name)}
-                        disabled={creatingTask === group.name}
-                        className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-blue-100'} ${creatingTask === group.name ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={creatingTask === group.name ? "Creating task..." : "Add Task"}
-                      >
-                        <LucidePlus className={`w-3 h-3 ${creatingTask === group.name ? 'text-gray-400' : 'text-gray-500'}`} />
-                      </button>
-                      <button 
-                        onClick={() => handleGroupActions(group.name)}
-                        disabled={performingAction?.startsWith('bulk-edit') || performingAction?.startsWith('export') || performingAction?.startsWith('archive') || performingAction?.startsWith('delete-all')}
-                        className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-blue-100'} ${performingAction ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={performingAction ? "Processing..." : "Group Actions"}
-                      >
-                        <LucideMoreHorizontal className={`w-3 h-3 ${performingAction ? 'text-gray-400' : 'text-gray-500'}`} />
-                      </button>
+                      <RoleGuard requiredPermission="tasks.create" facilityId={facilityId} fallback={
+                        <button 
+                          disabled
+                          className={`p-1.5 rounded-md transition-colors opacity-50 cursor-not-allowed ${
+                            isDarkMode 
+                              ? 'text-gray-600' 
+                              : 'text-gray-400'
+                          }`}
+                          title="No permission to create tasks"
+                        >
+                          <LucidePlus className="w-3 h-3" />
+                        </button>
+                      }>
+                        <button 
+                          onClick={(e) => handleAddTask(group.name, e)}
+                          disabled={creatingTask === group.name}
+                          className={`p-1.5 rounded-md transition-colors ${
+                            isDarkMode 
+                              ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' 
+                              : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                          } ${creatingTask === group.name ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={creatingTask === group.name ? "Creating task..." : "Add Task"}
+                        >
+                          <LucidePlus className="w-3 h-3" />
+                        </button>
+                      </RoleGuard>
+                      <RoleGuard requiredPermission="tasks.delete" facilityId={facilityId} fallback={
+                        <button 
+                          disabled
+                          className={`p-1.5 rounded-md transition-colors opacity-50 cursor-not-allowed ${
+                            isDarkMode 
+                              ? 'text-gray-600' 
+                              : 'text-gray-400'
+                          }`}
+                          title="No permission for group actions"
+                          data-ellipsis
+                        >
+                          <LucideMoreHorizontal className="w-3 h-3" />
+                        </button>
+                      }>
+                        <button 
+                          onClick={() => handleGroupActions(group.name)}
+                          disabled={performingAction?.startsWith('archive') || performingAction?.startsWith('delete-all')}
+                          className={`p-1.5 rounded-md transition-colors ${
+                            isDarkMode 
+                              ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' 
+                              : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                          } ${performingAction ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={performingAction ? "Processing..." : "Group Actions"}
+                          data-ellipsis
+                        >
+                          {performingAction ? (
+                            <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <LucideMoreHorizontal className="w-3 h-3" />
+                          )}
+                        </button>
+                      </RoleGuard>
                       
                       {/* Group Actions Dropdown */}
                       {showGroupActions === group.name && (
-                        <div className={`absolute right-0 top-8 z-50 w-48 rounded-md shadow-lg border ${
-                          isDarkMode 
-                            ? 'bg-gray-800 border-gray-700' 
-                            : 'bg-white border-gray-200'
-                        }`}>
+                        <div 
+                          className={`absolute right-0 top-8 z-50 w-48 rounded-md shadow-md border ${
+                            isDarkMode 
+                              ? 'bg-gray-800 border-gray-700' 
+                              : 'bg-white border-gray-200'
+                          }`}
+                          data-dropdown
+                        >
+                          {/* Header */}
+                          <div className={`px-3 py-2 border-b ${
+                            isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className={`text-xs font-semibold ${
+                                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                                }`}>
+                                  Group Actions
+                                </h3>
+                                <p className={`text-xs ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}>
+                                  {group.tasks.length} tasks
+                                </p>
+                              </div>
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                isDarkMode ? 'bg-blue-900/20' : 'bg-blue-100'
+                              }`}>
+                                <LucideMoreHorizontal className="w-3 h-3 text-blue-500" />
+                              </div>
+                            </div>
+                          </div>
+                          
                           <div className="py-1">
                             <button
-                              onClick={() => handleGroupAction('bulk-edit', group.name)}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGroupAction('archive', group.name);
+                              }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
                                 isDarkMode 
                                   ? 'text-gray-300 hover:bg-gray-700' 
                                   : 'text-gray-700 hover:bg-gray-100'
                               }`}
                             >
-                              Bulk Edit Tasks
+                              <div className={`p-1 rounded ${
+                                isDarkMode ? 'bg-amber-900/20' : 'bg-amber-100'
+                              }`}>
+                                <LucideArchive className="w-3 h-3 text-amber-500" />
+                              </div>
+                              <div className="flex flex-col items-start flex-1">
+                                <span className="font-medium">Archive All Tasks</span>
+                                <span className={`text-xs truncate ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}>
+                                  Mark all completed
+                                </span>
+                              </div>
                             </button>
+                            
+                            {/* Divider */}
+                            <div className={`mx-3 my-1 border-t-2 ${
+                              isDarkMode ? 'border-gray-600' : 'border-gray-300'
+                            }`} />
+                            
                             <button
-                              onClick={() => handleGroupAction('export', group.name)}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                                isDarkMode 
-                                  ? 'text-gray-300 hover:bg-gray-700' 
-                                  : 'text-gray-700 hover:bg-gray-100'
-                              }`}
-                            >
-                              Export Tasks
-                            </button>
-                            <button
-                              onClick={() => handleGroupAction('archive', group.name)}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                                isDarkMode 
-                                  ? 'text-gray-300 hover:bg-gray-700' 
-                                  : 'text-gray-700 hover:bg-gray-100'
-                              }`}
-                            >
-                              Archive All Tasks
-                            </button>
-                            <button
-                              onClick={() => handleGroupAction('delete-all', group.name)}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGroupAction('delete-all', group.name);
+                              }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
                                 isDarkMode 
                                   ? 'text-red-400 hover:bg-gray-700' 
                                   : 'text-red-600 hover:bg-gray-100'
                               }`}
                             >
-                              Delete All Tasks
+                              <div className={`p-1 rounded ${
+                                isDarkMode ? 'bg-red-900/20' : 'bg-red-100'
+                              }`}>
+                                <LucideTrash2 className="w-3 h-3 text-red-500" />
+                              </div>
+                              <div className="flex flex-col items-start flex-1">
+                                <span className="font-medium">Delete All Tasks</span>
+                                <span className={`text-xs truncate ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}>
+                                  Remove all permanently
+                                </span>
+                              </div>
                             </button>
+                          </div>
+                          
+                          {/* Footer */}
+                          <div className={`px-3 py-2 border-t ${
+                            isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <p className={`text-xs ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                Affects {group.tasks.length} tasks
+                              </p>
+                              <div className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {group.tasks.length}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -690,14 +910,13 @@ const ListView: React.FC<ListViewProps> = ({
                       key={`${task.id}-${(task as any)._clientUpdatedAt || task.updatedAt || task.createdAt}`}
                       className={`flex items-center px-6 py-2 hover:${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} transition-colors border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}
                     >
-                      {/* Checkbox */}
+                      {/* Task Number */}
                       <div className="w-6 flex-shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={selectedTasks.has(task.id)}
-                          onChange={() => handleSelectTask(task.id)}
-                          className="rounded-full w-4 h-4"
-                        />
+                        <div className="w-4 h-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                          <span className="text-gray-600 dark:text-gray-300 text-xs font-medium">
+                            {group.tasks.indexOf(task) + 1}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Task Name & Details */}
@@ -735,15 +954,25 @@ const ListView: React.FC<ListViewProps> = ({
                                 autoFocus
                               />
                             ) : (
-                              <Tooltip content={`Click to open task details • Double-click to edit title`}>
-                                <span
-                                  className={`text-xs cursor-pointer hover:text-brand transition-colors ${isDarkMode ? 'text-gray-900' : 'text-gray-700'}`}
-                                  onDoubleClick={() => startEditing(task.id, 'title', task.title)}
-                                  onClick={() => onTaskClick(task.id)}
-                                >
-                                  {task.title}
-                                </span>
-                              </Tooltip>
+                              <RoleGuard requiredPermission="tasks.view_all" facilityId={facilityId} fallback={
+                                <Tooltip content="No permission to view task details">
+                                  <span
+                                    className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'} opacity-75`}
+                                  >
+                                    {task.title}
+                                  </span>
+                                </Tooltip>
+                              }>
+                                <Tooltip content={`Click to open task details • Double-click to edit title`}>
+                                  <span
+                                    className={`text-xs cursor-pointer hover:text-brand transition-colors ${isDarkMode ? 'text-gray-900' : 'text-gray-700'}`}
+                                    onDoubleClick={() => startEditing(task.id, 'title', task.title)}
+                                    onClick={() => onTaskClick(task.id)}
+                                  >
+                                    {task.title}
+                                  </span>
+                                </Tooltip>
+                              </RoleGuard>
                             )}
                           </div>
 
@@ -754,28 +983,38 @@ const ListView: React.FC<ListViewProps> = ({
                           const completedSubtasks = subtasks.filter((sub: any) => sub.completed).length;
                           const totalSubtasks = subtasks.length;
                           
-                          if (loadingSubtasks) {
+                          if (loadingSubtasks && !loadedSubtasks.has(task.id)) {
                             return 'Loading subtask progress...';
                           }
                           if (totalSubtasks === 0 && !loadedSubtasks.has(task.id)) {
-                            return 'Loading subtask progress...';
+                            return 'No subtasks found';
                           }
                           return `Task Progress: ${completedSubtasks} completed out of ${totalSubtasks} total subtasks`;
                         })()}>
                           <div className="flex items-center space-x-1 cursor-help hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                            <LucideList className="w-3 h-3" />
+                            <LucideList className={`w-3 h-3 ${loadingSubtasks && !loadedSubtasks.has(task.id) ? 'animate-pulse' : ''}`} />
                             <span>{(() => {
                               const subtasks = taskSubtasks[task.id] || [];
                               const completedSubtasks = subtasks.filter((sub: any) => sub.completed).length;
                               const totalSubtasks = subtasks.length;
                               
-                              if (loadingSubtasks) {
+                              // Show loading indicator only if we're actively loading this specific task
+                              if (loadingSubtasks && !loadedSubtasks.has(task.id)) {
                                 return '...';
                               }
-                              if (totalSubtasks === 0 && !loadedSubtasks.has(task.id)) {
-                                return '...';
+                              
+                              // If we have subtask data, show it
+                              if (totalSubtasks > 0) {
+                                return `${completedSubtasks}/${totalSubtasks}`;
                               }
-                              return totalSubtasks > 0 ? `${completedSubtasks}/${totalSubtasks}` : '0/0';
+                              
+                              // Fallback to task progress field if available
+                              if (task.progress !== undefined) {
+                                return `${Math.round(task.progress)}%`;
+                              }
+                              
+                              // Default to 0/0 if no data
+                              return '0/0';
                             })()}</span>
                           </div>
                         </Tooltip>
@@ -849,8 +1088,8 @@ const ListView: React.FC<ListViewProps> = ({
                           if (assignees.length === 0) return 'No assignees • Click to assign team members';
                           const assigneeNames = assignees.map((assignee: any) => {
                             const id = typeof assignee === 'string' ? assignee : assignee.id;
-                            const profile = assigneeProfiles[id];
-                            return profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Unknown User';
+                            const member = facilityMembers[id];
+                            return member ? member.name : 'Unknown User';
                           });
                           return `Assigned to: ${assigneeNames.join(', ')}`;
                         })()}>
@@ -866,15 +1105,15 @@ const ListView: React.FC<ListViewProps> = ({
                                 return assignees.slice(0, 3).map((assignee, index) => {
                                   // Handle both string IDs and object assignees
                                   const id = typeof assignee === 'string' ? assignee : assignee.id;
-                                  const profile = assigneeProfiles[id];
-                                  const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Unknown User';
-                                  const initials = profile ? `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase() : '?';
+                                  const member = facilityMembers[id];
+                                  const fullName = member ? member.name : 'Unknown User';
+                                  const initials = member ? member.name.charAt(0).toUpperCase() : '?';
                                   
                                   return (
                                     <div key={`${id}-${index}`} className="relative">
-                                      {profile?.profilePicture ? (
+                                      {member?.profilePicture ? (
                                         <img
-                                          src={profile.profilePicture}
+                                          src={member.profilePicture}
                                           alt={fullName}
                                           className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                                           onError={(e) => {
@@ -894,7 +1133,7 @@ const ListView: React.FC<ListViewProps> = ({
                                       {/* Fallback avatar with initials */}
                                       <div 
                                         className="w-5 h-5 rounded-full flex items-center justify-center border bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700"
-                                        style={{ display: (profile?.profilePicture && profile.profilePicture.trim() !== '') ? 'none' : 'flex' }}
+                                        style={{ display: (member?.profilePicture && member.profilePicture.trim() !== '') ? 'none' : 'flex' }}
                                       >
                                         <span className="text-xs font-medium">
                                           {initials}
@@ -963,6 +1202,102 @@ const ListView: React.FC<ListViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Task Creation Modal */}
+      <TaskCreationModal
+        isOpen={showAddTaskModal !== null}
+        onClose={() => setShowAddTaskModal(null)}
+        onSubmit={handleCreateTaskFromModal}
+        isDarkMode={isDarkMode}
+        position={modalPosition}
+        placeholder="Enter task name..."
+      />
+
+      {/* Confirmation Modal */}
+      {showConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setShowConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          
+          {/* Modal */}
+          <div className={`relative w-full max-w-sm rounded-lg shadow-lg border ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700' 
+              : 'bg-white border-gray-200'
+          }`}>
+            {/* Header */}
+            <div className={`px-4 py-3 border-b ${
+              isDarkMode ? 'border-gray-700' : 'border-gray-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                  showConfirmModal.type === 'danger' ? 'bg-red-100 dark:bg-red-900/20' :
+                  showConfirmModal.type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/20' :
+                  'bg-blue-100 dark:bg-blue-900/20'
+                }`}>
+                  {showConfirmModal.type === 'danger' ? (
+                    <LucideTrash2 className="w-3 h-3 text-red-500" />
+                  ) : showConfirmModal.type === 'warning' ? (
+                    <LucideArchive className="w-3 h-3 text-amber-500" />
+                  ) : (
+                    <LucideEdit3 className="w-3 h-3 text-blue-500" />
+                  )}
+                </div>
+                <h3 className={`text-sm font-semibold ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                }`}>
+                  {showConfirmModal.title}
+                </h3>
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="px-4 py-3">
+              <p className={`text-xs leading-relaxed ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-600'
+              }`}>
+                {showConfirmModal.message}
+              </p>
+            </div>
+            
+            {/* Actions */}
+            <div className={`px-4 py-3 border-t flex gap-2 justify-end ${
+              isDarkMode ? 'border-gray-700' : 'border-gray-200'
+            }`}>
+              {showConfirmModal.cancelText && (
+                <button
+                  onClick={() => setShowConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    isDarkMode 
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {showConfirmModal.cancelText}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  showConfirmModal.onConfirm();
+                  setShowConfirmModal(prev => ({ ...prev, isOpen: false }));
+                }}
+                className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                  showConfirmModal.type === 'danger' 
+                    ? 'bg-red-500 text-white hover:bg-red-600' :
+                  showConfirmModal.type === 'warning'
+                    ? 'bg-amber-500 text-white hover:bg-amber-600' :
+                    'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
+              >
+                {showConfirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

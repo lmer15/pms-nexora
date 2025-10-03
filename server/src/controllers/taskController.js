@@ -377,6 +377,10 @@ exports.updateTask = async (req, res) => {
       delete payload.assignees;
     }
     
+    // Get the original task to check if projectId changed
+    const originalTask = await Task.findById(req.params.id);
+    const oldProjectId = originalTask?.projectId;
+    
     const updatedTask = await Task.update(req.params.id, payload);
     if (!updatedTask) {
       return res.status(404).json({ message: 'Task not found' });
@@ -404,6 +408,21 @@ exports.updateTask = async (req, res) => {
     }
     if (updatedTask.assigneeIds && !updatedTask.assignees) {
       updatedTask.assignees = updatedTask.assigneeIds;
+    }
+
+    // Invalidate cache for project task counts and facility stats
+    cacheService.invalidateProjectTasksCount(updatedTask.projectId);
+    cacheService.invalidateProjectTasks(updatedTask.projectId);
+    
+    // If projectId changed, also invalidate the old project's cache
+    if (oldProjectId && oldProjectId !== updatedTask.projectId) {
+      cacheService.invalidateProjectTasksCount(oldProjectId);
+      cacheService.invalidateProjectTasks(oldProjectId);
+    }
+    
+    const project = await Project.findById(updatedTask.projectId);
+    if (project) {
+      cacheService.invalidateFacilityStats(project.facilityId);
     }
 
     res.json(updatedTask);
@@ -462,6 +481,15 @@ exports.pinTask = async (req, res) => {
 
     // Invalidate cache for project task counts and facility stats
     cacheService.invalidateProjectTasksCount(updatedTask.projectId);
+    cacheService.invalidateProjectTasks(updatedTask.projectId); // CRITICAL: Invalidate cached tasks too!
+    
+    // If projectId changed, also invalidate the old project's cache
+    if (oldProjectId && oldProjectId !== updatedTask.projectId) {
+      console.log(`Task moved from project ${oldProjectId} to ${updatedTask.projectId}, invalidating both caches`);
+      cacheService.invalidateProjectTasksCount(oldProjectId);
+      cacheService.invalidateProjectTasks(oldProjectId);
+    }
+    
     const project = await Project.findById(updatedTask.projectId);
     if (project) {
       cacheService.invalidateFacilityStats(project.facilityId);

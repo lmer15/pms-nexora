@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
-import { LucideX, Copy, Trash2, UserPlus, AlertCircle, CheckCircle, Loader2, Search, User, X } from 'lucide-react';
+import { LucideX, Copy, Trash2, UserPlus, AlertCircle, CheckCircle, Loader2, Search, User, X, Crown } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card } from '../../../components/ui/card';
@@ -14,9 +14,10 @@ interface ShareFacilityModalProps {
   isDarkMode: boolean;
 }
 
-const roles = ['admin', 'member', 'guest'];
+const roles = ['manager', 'member', 'guest'];
 const roleDisplayNames = {
-  admin: 'Admin',
+  owner: 'Owner',
+  manager: 'Manager',
   member: 'Member', 
   guest: 'Guest'
 };
@@ -105,7 +106,16 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
     setIsLoadingMembers(true);
     try {
       const response = await facilityShareService.getFacilityMembers(facilityId);
-      setMembers(response.members);
+      
+      // Deduplicate members by ID to prevent duplicate users
+      const uniqueMembers = response.members.reduce((acc: FacilityMember[], member) => {
+        if (!acc.find(m => m.id === member.id)) {
+          acc.push(member);
+        }
+        return acc;
+      }, []);
+      
+      setMembers(uniqueMembers);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -273,7 +283,17 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
       }
 
       if (failed > 0) {
-        setError(`Failed to send ${failed} invitation${failed > 1 ? 's' : ''}`);
+        // Check if any failures are due to already sent invitations
+        const alreadySentErrors = results
+          .filter(r => r.status === 'rejected')
+          .map(r => r.reason?.message || r.reason)
+          .filter(msg => msg && msg.includes('already sent'));
+        
+        if (alreadySentErrors.length > 0) {
+          setError(`Some invitations were already sent to these users. Please check the email addresses.`);
+        } else {
+          setError(`Failed to send ${failed} invitation${failed > 1 ? 's' : ''}`);
+        }
       }
 
     } catch (error: any) {
@@ -304,38 +324,30 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
       // Refresh members in case they were already registered
       loadMembers();
     } catch (err: any) {
-      setError(err.message);
+      // Handle specific error messages more gracefully
+      if (err.message && err.message.includes('already sent')) {
+        setError('An invitation has already been sent to this email address.');
+      } else if (err.message && err.message.includes('already a member')) {
+        setError('This user is already a member of the facility.');
+      } else if (err.message && err.message.includes('cannot invite yourself')) {
+        setError('You cannot invite yourself to the facility.');
+      } else {
+        setError(err.message || 'Failed to send invitation');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
-    try {
-      await facilityShareService.updateMemberRole(facilityId, memberId, newRole);
-      setSuccess('Member role updated successfully!');
-      loadMembers();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleRemoveMember = async (memberId: string) => {
-    if (!confirm('Are you sure you want to remove this member?')) {
+  const handleDeleteLink = async () => {
+    if (!shareLink || !confirm('Are you sure you want to delete this share link?')) {
       return;
     }
 
     try {
-      await facilityShareService.removeMember(facilityId, memberId);
-      setSuccess('Member removed successfully!');
-      
-      // Immediately refresh facility list so the removed member no longer sees the facility
-      await refreshFacilities();
-      
-      // Trigger comprehensive refresh of all components that display user information
-      triggerMemberRefresh(facilityId);
-      
-      loadMembers();
+      await facilityShareService.deactivateShareLink(facilityId);
+      setShareLink(null);
+      setSuccess('Share link deleted successfully!');
     } catch (err: any) {
       setError(err.message);
     }
@@ -365,19 +377,6 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
     }
   };
 
-  const handleDeleteLink = async () => {
-    if (!shareLink || !confirm('Are you sure you want to delete this share link?')) {
-      return;
-    }
-
-    try {
-      await facilityShareService.deactivateShareLink(facilityId);
-      setShareLink(null);
-      setSuccess('Share link deleted successfully!');
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
 
   const handleUpdateShareLinkRole = async (newRole: string) => {
     if (!shareLink) return;
@@ -419,7 +418,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-60">
       <div className={`w-full max-w-lg mx-4 rounded-lg shadow-2xl ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
         {/* Header */}
         <div className={`px-6 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
@@ -464,8 +463,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                     }`}
                   >
                     <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold text-white`}
-                      style={{ backgroundColor: user.avatarColor || '#6B7280' }}
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold text-white bg-gray-500 dark:bg-gray-600`}
                     >
                       {user.name.charAt(0).toUpperCase()}
                     </div>
@@ -534,7 +532,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
 
             {/* Search Results Dropdown */}
             {showDropdown && (searchResults.length > 0 || emailOrName.trim().length >= 2) && (
-              <div className={`absolute top-full left-0 right-0 mt-1 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto ${
+              <div className={`absolute top-full left-0 right-0 mt-1 rounded-md shadow-lg z-[10000] max-h-60 overflow-y-auto ${
                 isDarkMode ? 'bg-gray-800 border border-gray-600' : 'bg-white border border-gray-300'
               }`}>
                 {searchResults.length > 0 ? (
@@ -544,7 +542,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                     </div>
                     {searchResults.map((user) => (
                       <button
-                        key={user.id}
+                        key={`search-${user.id}`}
                         onClick={() => handleUserSelect(user)}
                         className={`w-full px-3 py-2 text-left hover:bg-opacity-50 flex items-center space-x-3 ${
                           isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
@@ -552,8 +550,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                         disabled={selectedUsers.some(u => u.email === user.email)}
                       >
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white`}
-                          style={{ backgroundColor: user.avatarColor }}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white bg-gray-500 dark:bg-gray-600`}
                         >
                           {user.name.charAt(0).toUpperCase()}
                         </div>
@@ -641,7 +638,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                     </button>
                     <button 
                       onClick={handleDeleteLink}
-                      className="text-red-500 hover:underline font-medium text-xs flex items-center space-x-1"
+                      className="text-red-500 hover:underline dark:text-red-400 dark:hover:text-red-300 font-medium text-xs flex items-center space-x-1 transition-colors"
                     >
                       <Trash2 size={12} />
                       <span>Delete link</span>
@@ -705,9 +702,15 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                 <span className="ml-2">Loading members...</span>
               </div>
             ) : members.length > 0 ? (
-              <ul className="space-y-3">
+              <div>
+                <div className={`mb-4 p-3 rounded-lg ${isDarkMode ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`}>
+                  <p className={`text-sm ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                    💡 <strong>Tip:</strong> To change member roles, use the "Manage Roles" button in the facility header for detailed role management.
+                  </p>
+                </div>
+                <ul className="space-y-3">
                 {members.map((member) => (
-                  <li key={member.id} className="flex items-center justify-between">
+                  <li key={`member-${member.id}`} className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       {member.profilePicture ? (
                         <img
@@ -724,15 +727,13 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                         />
                       ) : null}
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-white text-xs ${member.profilePicture ? 'hidden' : ''}`}
-                        style={{ backgroundColor: member.avatarColor }}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-white text-xs bg-gray-500 dark:bg-gray-600 ${member.profilePicture ? 'hidden' : ''}`}
                       >
                         {member.name.charAt(0).toUpperCase()}{member.name.charAt(1)?.toUpperCase() || ''}
                       </div>
                       <div>
                         <p className="text-sm font-semibold">
-                          {member.name} 
-                          {member.isOwner && <span className="text-xs text-yellow-500 ml-1">(Owner)</span>}
+                          {member.name}
                         </p>
                         <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           @{member.username} • {roleDisplayNames[member.role as keyof typeof roleDisplayNames]}
@@ -740,29 +741,22 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <select
-                        value={member.role}
-                        onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                        className={`border rounded-md px-2 py-1 text-sm focus:ring-4 focus:ring-brand ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-400 text-gray-900'}`}
-                        disabled={member.isOwner}
-                      >
-                        {roles.map((role) => (
-                          <option key={role} value={role}>{roleDisplayNames[role as keyof typeof roleDisplayNames]}</option>
-                        ))}
-                      </select>
-                      {!member.isOwner && (
-                        <button
-                          onClick={() => handleRemoveMember(member.id)}
-                          className="text-red-500 hover:text-red-700 p-1"
-                          title="Remove member"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        member.role === 'owner' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                        member.role === 'manager' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                        member.role === 'member' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                        'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                      }`}>
+                        {roleDisplayNames[member.role as keyof typeof roleDisplayNames]}
+                      </span>
+                      {member.isOwner && (
+                        <Crown className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
                       )}
                     </div>
                   </li>
                 ))}
               </ul>
+              </div>
             ) : (
               <p className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>No members found</p>
             )
@@ -797,8 +791,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
                           />
                         ) : null}
                         <div
-                          className={`fallback-initials absolute inset-0 flex items-center justify-center font-semibold text-white text-xs ${request.user.profilePicture ? 'hidden' : 'flex'}`}
-                          style={{ backgroundColor: request.user.avatarColor }}
+                          className={`fallback-initials absolute inset-0 flex items-center justify-center font-semibold text-white text-xs bg-gray-500 dark:bg-gray-600 ${request.user.profilePicture ? 'hidden' : 'flex'}`}
                         >
                           {request.user.name.charAt(0).toUpperCase()}{request.user.name.charAt(1)?.toUpperCase() || ''}
                         </div>

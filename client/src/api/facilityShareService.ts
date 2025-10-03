@@ -84,11 +84,44 @@ class FacilityShareService {
   // Get facility members
   async getFacilityMembers(facilityId: string): Promise<{ members: FacilityMember[]; totalCount: number }> {
     try {
+      // Check cache first
+      const cacheKey = `facility_members_${facilityId}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (cachedData) {
+        const parsedData = JSON.parse(cachedData);
+        const cacheTime = parsedData.timestamp;
+        const now = Date.now();
+        
+        // Use cache if less than 2 minutes old (increased from 60 seconds)
+        if (now - cacheTime < 120000) {
+          console.log('Using cached facility members for:', facilityId);
+          return parsedData.data;
+        }
+      }
+      
+      console.log('Fetching fresh facility members for:', facilityId);
       const response = await api.get(`/facilities/${facilityId}/members`);
+      
+      // Cache the response for 2 minutes
+      const cacheData = {
+        data: response.data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      
       return response.data;
     } catch (error: any) {
+      console.error('Error fetching facility members:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch facility members');
     }
+  }
+
+  // Clear facility members cache (useful when members are added/removed)
+  clearFacilityMembersCache(facilityId: string): void {
+    const cacheKey = `facility_members_${facilityId}`;
+    localStorage.removeItem(cacheKey);
+    console.log('Cleared facility members cache for:', facilityId);
   }
 
   // Update member role
@@ -98,6 +131,10 @@ class FacilityShareService {
         targetUserId,
         newRole
       });
+      
+      // Clear cache when roles change
+      this.clearFacilityMembersCache(facilityId);
+      
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to update member role');
@@ -110,6 +147,10 @@ class FacilityShareService {
       const response = await api.delete(`/facilities/${facilityId}/members`, {
         data: { targetUserId }
       });
+      
+      // Clear cache when members are removed
+      this.clearFacilityMembersCache(facilityId);
+      
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to remove member');
@@ -204,6 +245,10 @@ class FacilityShareService {
       const response = await api.post(`/facilities/${facilityId}/join-requests/${requestId}/approve`, {
         assignedRole
       });
+      
+      // Clear cache when new members are added
+      this.clearFacilityMembersCache(facilityId);
+      
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to approve join request');
@@ -246,6 +291,12 @@ class FacilityShareService {
   async acceptInvitation(token: string): Promise<{ message: string; facility: any; role: string }> {
     try {
       const response = await api.post(`/facilities/invitations/${token}/accept`);
+      
+      // Clear cache when user joins via invitation
+      if (response.data.facility?.id) {
+        this.clearFacilityMembersCache(response.data.facility.id);
+      }
+      
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to accept invitation');
@@ -290,7 +341,7 @@ class FacilityShareService {
 
   // Validate role
   validateRole(role: string): boolean {
-    const validRoles = ['admin', 'member', 'guest'];
+    const validRoles = ['manager', 'member', 'guest'];
     return validRoles.includes(role);
   }
 }

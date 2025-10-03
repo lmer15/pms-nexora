@@ -97,7 +97,13 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     setLoadingMembers(true);
     try {
       const members = await facilityService.getFacilityMembers(facilityId);
-      setFacilityMembers(members);
+      
+      // Deduplicate facility members to prevent duplicate keys
+      const uniqueMembers = members.filter((member, index, self) => 
+        index === self.findIndex(m => m.id === member.id)
+      );
+      
+      setFacilityMembers(uniqueMembers);
     } catch (error) {
       console.error('Failed to load facility members:', error);
     } finally {
@@ -121,8 +127,9 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
     const singleAssignee = editedTask.assignee || task.assignee;
     const allAssignees = currentAssignees.length > 0 ? currentAssignees : (singleAssignee ? [singleAssignee] : []);
+    const uniqueAssignees = [...new Set(allAssignees)];
     
-    return !allAssignees.includes(m.id);
+    return !uniqueAssignees.includes(m.id);
   });
 
   const currentTags: string[] = (editedTask.tags ?? task.tags ?? []) as string[];
@@ -389,17 +396,21 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                       // Handle backward compatibility - if there's a single assignee but no assignees array
                       const allAssignees = currentAssignees.length > 0 ? currentAssignees : (singleAssignee ? [singleAssignee] : []);
                       
+                      // Deduplicate assignees to prevent duplicate keys
+                      const uniqueAssignees = [...new Set(allAssignees)];
+                      
+                      
                       return (
                         <div className="flex items-center gap-1">
                           {/* Display assignee profiles */}
-                          {allAssignees.map((assigneeId, index) => {
+                          {uniqueAssignees.map((assigneeId, index) => {
                             const member = facilityMembers.find(m => m.id === assigneeId);
                             const fullName = member ? member.name : '';
                             const profileSrc = member?.profilePicture;
                             const fallbackInitial = (member?.name?.charAt(0) || member?.email?.charAt(0) || '?').toUpperCase();
                             
                             return (
-                              <div key={assigneeId} className="relative group">
+                              <div key={`assignee-${assigneeId}-${index}`} className="relative group">
                                 <div 
                                   className="w-7 h-7 rounded-full overflow-hidden bg-brand text-white flex items-center justify-center text-xs font-medium cursor-pointer"
                                   title={fullName}
@@ -414,7 +425,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    const updatedAssignees = allAssignees.filter(id => id !== assigneeId);
+                                    const updatedAssignees = uniqueAssignees.filter(id => id !== assigneeId);
                                     handleInputChange('assigneeIds', updatedAssignees);
                                     try {
                                       if (onFieldChangeAndSave) {
@@ -490,10 +501,11 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
                             const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
                             const singleAssignee = editedTask.assignee || task.assignee;
                             const allAssignees = currentAssignees.length > 0 ? currentAssignees : (singleAssignee ? [singleAssignee] : []);
+                            const uniqueAssignees = [...new Set(allAssignees)];
                             
                             // Add new assignee if not already assigned
-                            if (!allAssignees.includes(member.id)) {
-                              const updatedAssignees = [...allAssignees, member.id];
+                            if (!uniqueAssignees.includes(member.id)) {
+                              const updatedAssignees = [...uniqueAssignees, member.id];
                               handleInputChange('assigneeIds', updatedAssignees);
                               
                               // Auto-save to database
@@ -1173,7 +1185,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
               </div>
               <div className="space-y-2">
                 {recentActivities.map((activity, index) => (
-                  <div key={index} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div key={`activity-${activity.type}-${activity.id || activity.timestamp || index}`} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                     <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {renderActivityContent(activity.type === 'comment' ? activity.content : activity.description)}
                     </div>

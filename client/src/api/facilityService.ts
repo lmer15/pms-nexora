@@ -82,6 +82,56 @@ export const facilityService = {
     return response.data.members;
   },
 
+  // Get current user's role in facility (more efficient than fetching all members)
+  getUserRole: async (facilityId: string): Promise<{ role: string; isOwner: boolean }> => {
+    // Check cache first
+    const cacheKey = `user_role_${facilityId}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached) {
+      const parsedData = JSON.parse(cached);
+      const cacheTime = parsedData.timestamp;
+      const now = Date.now();
+      
+      // Use cache if less than 1 minute old
+      if (now - cacheTime < 60000) {
+        console.log('Using cached user role for facility:', facilityId);
+        return parsedData.data;
+      }
+    }
+    
+    try {
+      const response = await api.get(`/facilities/${facilityId}/user-role`);
+      
+      // Cache the response for 1 minute
+      const cacheData = {
+        data: response.data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      
+      return response.data;
+    } catch (error: any) {
+      // If the endpoint doesn't exist, fall back to fetching all members
+      console.log('User role endpoint not available, falling back to members list');
+      const members = await facilityService.getFacilityMembers(facilityId);
+      const currentUser = members.find(member => member.id === localStorage.getItem('userId'));
+      
+      if (currentUser) {
+        return { role: currentUser.role, isOwner: currentUser.isOwner };
+      }
+      
+      throw new Error('User not found in facility');
+    }
+  },
+
+  // Clear user role cache
+  clearUserRoleCache: (facilityId: string): void => {
+    const cacheKey = `user_role_${facilityId}`;
+    localStorage.removeItem(cacheKey);
+    console.log('Cleared user role cache for facility:', facilityId);
+  },
+
   // Get facility statistics
   getFacilityStats: async (facilityId: string): Promise<FacilityStats> => {
     // Check cache first
@@ -140,7 +190,24 @@ export const facilityService = {
       }>;
     }>;
   }> => {
-    const response = await api.get(`/facilities/${id}/data?includeTasks=${includeTasks}`);
-    return response.data;
+    // Check cache first
+    const cacheKey = `facility_data_${id}_${includeTasks}`;
+    const cachedData = cacheService.get(cacheKey);
+    
+    if (cachedData && (cachedData as any).facility && (cachedData as any).projects) {
+      return cachedData as any;
+    }
+    
+    try {
+      const response = await api.get(`/facilities/${id}/data?includeTasks=${includeTasks}`);
+      
+      // Cache the response for 30 seconds
+      cacheService.set(cacheKey, response.data, 30000);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching facility data:', error);
+      throw error;
+    }
   },
 };

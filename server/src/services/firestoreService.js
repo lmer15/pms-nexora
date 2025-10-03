@@ -179,6 +179,16 @@ class FirestoreService {
       throw new Error(`Error counting documents: ${error.message}`);
     }
   }
+
+  // Get a batch instance for batch operations
+  static batch() {
+    return db.batch();
+  }
+
+  // Get collection reference
+  static collection(collectionName) {
+    return db.collection(collectionName);
+  }
 }
 
 module.exports = FirestoreService;

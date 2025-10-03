@@ -218,10 +218,7 @@ const taskService = {
     const response = await api.put(`/tasks/${id}`, taskData);
     const task = response.data;
     
-    // Invalidate cache for this project
     cacheService.invalidateTask(task.projectId);
-    
-    // Clear task details cache for this specific task
     taskService.clearTaskDetailsCache(id);
     
     return task;
@@ -413,8 +410,10 @@ const taskService = {
 
   // Subtasks
   getSubtasks: async (taskId: string): Promise<TaskSubtask[]> => {
-    const response = await api.get(`/tasks/${taskId}/subtasks`);
-    return response.data;
+    return await retryWithBackoff(async () => {
+      const response = await api.get(`/tasks/${taskId}/subtasks`);
+      return response.data;
+    });
   },
 
   createSubtask: async (taskId: string, subtaskData: { title: string; description?: string }): Promise<TaskSubtask> => {

@@ -18,6 +18,9 @@ import {
   LucideFilter,
   LucideX,
   LucideBookmark,
+  LucideChevronUp,
+  LucideChevronLeft,
+  LucideShield,
 } from 'lucide-react';
 import { Facility } from '../types';
 import { facilityService, FacilityMember } from '../../../api/facilityService';
@@ -25,6 +28,8 @@ import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import ShareFacilityModal from './ShareFacilityModal';
 import BreadcrumbDropdown from '../../../components/BreadcrumbDropdown';
 import SavedFilterViews from '../../../components/SavedFilterViews';
+import RoleIndicator, { CompactRoleIndicator } from '../../../components/RoleIndicator';
+import { RoleGuard, usePermissions } from '../../../components/RoleGuard';
 
 interface SlimFacilityHeaderProps {
   facility: Facility;
@@ -46,6 +51,8 @@ interface SlimFacilityHeaderProps {
   setAssigneeFilter?: (assignee: string) => void;
   tagFilter?: string;
   setTagFilter?: (tag: string) => void;
+  // Role management
+  onManageRoles?: () => void;
   priorityFilter?: string;
   setPriorityFilter?: (priority: string) => void;
   availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
@@ -56,6 +63,9 @@ interface SlimFacilityHeaderProps {
   onProjectSelect?: (projectId: string) => void;
   // Saved filter views
   onApplyFilters?: (filters: {searchTerm: string, filter: string, assigneeFilter: string, tagFilter: string, priorityFilter: string}) => void;
+  // Collapse state
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
@@ -84,8 +94,12 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
   selectedProjectId,
   onProjectSelect,
   onApplyFilters,
+  isCollapsed = false,
+  onToggleCollapse,
+  onManageRoles,
 }) => {
   const { memberRefreshTriggers } = useFacilityRefresh();
+  const { canManageUsers, isOwner, isManager } = usePermissions();
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [members, setMembers] = useState<FacilityMember[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
@@ -172,9 +186,19 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
 
   return (
     <>
-      <div className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`} style={{ margin: 0, padding: 0, width: '100%' }}>
+      <div 
+        className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} transition-all duration-300 relative`} 
+        style={{ 
+          margin: 0, 
+          padding: 0, 
+          width: '100%',
+          height: isCollapsed ? '60px' : 'auto',
+          maxHeight: isCollapsed ? '60px' : 'none',
+          zIndex: 1000
+        }}
+      >
         {/* Main Header Row */}
-        <div className="flex items-center justify-between px-6 py-3">
+        <div className={`flex items-center justify-between px-6 transition-all duration-300 ${isCollapsed ? 'py-2' : 'py-3'}`}>
           {/* Left: Project Name + Quick Stats */}
           <div className="flex items-center space-x-4">
             <BreadcrumbDropdown
@@ -187,64 +211,70 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
               isDarkMode={isDarkMode}
             />
             
-            {/* Compact Progress Pill */}
-            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">
-              <div className="flex items-center space-x-1">
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                  {completionPercentage}%
-                </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">·</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {facilityStats.openTaskCount} open
-                </span>
+            {/* Compact Progress Pill - Hidden when collapsed */}
+            {!isCollapsed && (
+              <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                    {completionPercentage}%
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">·</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {facilityStats.openTaskCount} open
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Center: Search Bar */}
-          <div className="flex-1 max-w-md mx-6">
-            <div className="relative">
-              <LucideSearch className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10" />
-              <input
-                type="text"
-                placeholder="Search tasks and projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-sm border-0 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm hover:shadow-md focus:ring-2 focus:ring-brand focus:shadow-lg focus:outline-none transition-all duration-200"
-              />
+          {/* Center: Search Bar - Hidden when collapsed */}
+          {!isCollapsed && (
+            <div className="flex-1 max-w-md mx-6">
+              <div className="relative">
+                <LucideSearch className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10" />
+                <input
+                  type="text"
+                  placeholder="Search tasks and projects..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 text-sm border-0 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm hover:shadow-md focus:ring-2 focus:ring-brand focus:shadow-lg focus:outline-none transition-all duration-200"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right: Actions */}
           <div className="flex items-center space-x-3">
+            {/* Saved Views Button - Hidden when collapsed */}
+            {!isCollapsed && (
+              <button
+                onClick={() => setIsSavedViewsOpen(true)}
+                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                <LucideBookmark className="w-3 h-3" />
+                <span>Views</span>
+              </button>
+            )}
 
-            {/* Saved Views Button */}
-            <button
-              onClick={() => setIsSavedViewsOpen(true)}
-              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-            >
-              <LucideBookmark className="w-3 h-3" />
-              <span>Views</span>
-            </button>
-
-            {/* Filters Toggle */}
-            <button
-              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-              className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                hasActiveFilters
-                  ? 'bg-brand text-white shadow-md'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              <LucideFilter className="w-3 h-3" />
-              <span>Filters</span>
-              {hasActiveFilters && (
-                <span className="ml-1 text-xs px-1.5 py-0.5 bg-white/20 rounded-full">
-                  {[filter, assigneeFilter, tagFilter, priorityFilter].filter(f => f !== 'all').length}
-                </span>
-              )}
-            </button>
-
+            {/* Filters Toggle - Hidden when collapsed */}
+            {!isCollapsed && (
+              <button
+                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                  hasActiveFilters
+                    ? 'bg-brand text-white shadow-md'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <LucideFilter className="w-3 h-3" />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="ml-1 text-xs px-1.5 py-0.5 bg-white/20 rounded-full">
+                    {[filter, assigneeFilter, tagFilter, priorityFilter].filter(f => f !== 'all').length}
+                  </span>
+                )}
+              </button>
+            )}
 
             {/* Share Button */}
             <button
@@ -252,14 +282,44 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium"
             >
               <LucideShare2 className="w-4 h-4" />
-              <span>Share</span>
+              {!isCollapsed && <span>Share</span>}
+            </button>
+
+            {/* Role Management Button */}
+            <RoleGuard requiredPermission="users.change_roles" facilityId={facility.id}>
+              <button
+                onClick={onManageRoles}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                title="Manage member roles"
+              >
+                <LucideShield className="w-4 h-4" />
+                {!isCollapsed && <span>Roles</span>}
+              </button>
+            </RoleGuard>
+
+            {/* Role Indicator */}
+            {!isCollapsed && (
+              <CompactRoleIndicator isDarkMode={isDarkMode} facilityId={facility.id} />
+            )}
+
+            {/* Collapse/Expand Button - Moved to the right of Share button */}
+            <button
+              onClick={onToggleCollapse}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
+              title={isCollapsed ? 'Expand header' : 'Collapse header'}
+            >
+              {isCollapsed ? (
+                <LucideChevronDown className="w-4 h-4" />
+              ) : (
+                <LucideChevronUp className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
 
-        {/* Collapsible Filters Row */}
-        {isFiltersOpen && (
-          <div className={`px-6 py-3 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+        {/* Collapsible Filters Row - Completely hidden when collapsed */}
+        {isFiltersOpen && !isCollapsed && (
+          <div className={`px-6 py-3 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} transition-all duration-300 relative z-[100]`}>
             <div className="flex items-center space-x-4">
               {/* Quick Filter Chips */}
               <div className="flex items-center space-x-1">
@@ -282,7 +342,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
               </div>
               
               {/* Basic Filter Dropdowns */}
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1 relative" style={{ zIndex: 1001 }}>
                 {/* Assignee Filter */}
                 <div className="relative filter-dropdown">
                   <button
@@ -322,7 +382,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isAssigneeDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
                       <div className="py-1">
                         <button
                           onClick={() => {
@@ -395,7 +455,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isPriorityDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="absolute top-full left-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
                       <div className="py-1">
                         {['all', 'high', 'medium', 'low'].map((priority) => (
                           <button
@@ -435,7 +495,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isTagDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
                       <div className="py-1">
                         <button
                           onClick={() => {
@@ -448,25 +508,25 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                         >
                           All Tags
                         </button>
-                        {isLoadingTags ? (
+                        {availableTags.length === 0 ? (
                           <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                            Loading tags...
+                            No tags found
                           </div>
                         ) : (
-                          facilityTags.map((tag) => (
+                          availableTags.map((tag) => (
                             <button
-                              key={tag}
+                              key={tag.id}
                               onClick={() => {
-                                setTagFilter?.(tag);
+                                setTagFilter?.(tag.name);
                                 setIsTagDropdownOpen(false);
                               }}
                               className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                                tagFilter === tag ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
+                                tagFilter === tag.name ? 'bg-brand text-white' : 'text-gray-700 dark:text-gray-300'
                               }`}
                             >
                               <div className="flex items-center space-x-2">
-                                <div className="w-2 h-2 rounded-full bg-brand"></div>
-                                <span>{tag}</span>
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }}></div>
+                                <span>{tag.name}</span>
                               </div>
                             </button>
                           ))
@@ -510,6 +570,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
         isOpen={isSavedViewsOpen}
         onClose={() => setIsSavedViewsOpen(false)}
         isDarkMode={isDarkMode}
+        facilityId={facility.id}
         currentFilters={{
           searchTerm,
           filter,

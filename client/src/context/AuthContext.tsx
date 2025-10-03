@@ -53,10 +53,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const response = await authService.syncUser(idToken);
           setToken(response.token);
-          // Store token in localStorage for API interceptor
           storage.setToken(response.token);
           
-          // Dispatch custom event to trigger user profile refresh
           const userProfileUpdatedEvent = new CustomEvent('userProfileUpdated', {
             detail: { userId: user.uid, user: response.user }
           });

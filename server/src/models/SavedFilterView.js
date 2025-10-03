@@ -1,15 +1,18 @@
 const FirestoreService = require('../services/firestoreService');
 
-class SavedFilterView {
-  constructor(data) {
-    this.id = data.id;
-    this.name = data.name;
-    this.facilityId = data.facilityId;
-    this.userId = data.userId;
-    this.filters = data.filters || {};
-    this.isDefault = data.isDefault || false;
-    this.createdAt = data.createdAt;
-    this.updatedAt = data.updatedAt;
+class SavedFilterView extends FirestoreService {
+  constructor(data = null) {
+    super('savedFilterViews');
+    if (data) {
+      this.id = data.id;
+      this.name = data.name;
+      this.facilityId = data.facilityId;
+      this.userId = data.userId;
+      this.filters = data.filters || {};
+      this.isDefault = data.isDefault || false;
+      this.createdAt = data.createdAt;
+      this.updatedAt = data.updatedAt;
+    }
   }
 
   // Create a new saved filter view
@@ -26,13 +29,12 @@ class SavedFilterView {
           tagFilter: data.filters.tagFilter || 'all',
           priorityFilter: data.filters.priorityFilter || 'all'
         },
-        isDefault: data.isDefault || false,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        isDefault: data.isDefault || false
       };
 
-      const docRef = await FirestoreService.create('savedFilterViews', filterViewData);
-      return new SavedFilterView({ id: docRef.id, ...filterViewData });
+      const instance = new SavedFilterView();
+      const result = await instance.create(filterViewData);
+      return new SavedFilterView(result);
     } catch (error) {
       console.error('Error creating saved filter view:', error);
       throw error;
@@ -42,19 +44,22 @@ class SavedFilterView {
   // Get saved filter views for a user in a facility
   static async getByUserAndFacility(userId, facilityId) {
     try {
-      const query = FirestoreService.collection('savedFilterViews')
-        .where('userId', '==', userId)
-        .where('facilityId', '==', facilityId)
-        .orderBy('createdAt', 'desc');
-
-      const snapshot = await query.get();
-      const filterViews = [];
-
-      snapshot.forEach(doc => {
-        filterViews.push(new SavedFilterView({ id: doc.id, ...doc.data() }));
+      const instance = new SavedFilterView();
+      const conditions = [
+        { field: 'userId', operator: '==', value: userId },
+        { field: 'facilityId', operator: '==', value: facilityId }
+      ];
+      
+      const results = await instance.query(conditions);
+      
+      // Sort by createdAt descending
+      results.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
       });
 
-      return filterViews;
+      return results.map(result => new SavedFilterView(result));
     } catch (error) {
       console.error('Error getting saved filter views:', error);
       throw error;
@@ -64,11 +69,12 @@ class SavedFilterView {
   // Get a specific saved filter view by ID
   static async getById(id) {
     try {
-      const doc = await FirestoreService.get('savedFilterViews', id);
-      if (!doc.exists) {
+      const instance = new SavedFilterView();
+      const result = await instance.findById(id);
+      if (!result) {
         return null;
       }
-      return new SavedFilterView({ id: doc.id, ...doc.data() });
+      return new SavedFilterView(result);
     } catch (error) {
       console.error('Error getting saved filter view by ID:', error);
       throw error;
@@ -78,12 +84,8 @@ class SavedFilterView {
   // Update a saved filter view
   static async update(id, data) {
     try {
-      const updateData = {
-        ...data,
-        updatedAt: new Date()
-      };
-
-      await FirestoreService.update('savedFilterViews', id, updateData);
+      const instance = new SavedFilterView();
+      await instance.update(id, data);
       return await this.getById(id);
     } catch (error) {
       console.error('Error updating saved filter view:', error);
@@ -94,7 +96,8 @@ class SavedFilterView {
   // Delete a saved filter view
   static async delete(id) {
     try {
-      await FirestoreService.delete('savedFilterViews', id);
+      const instance = new SavedFilterView();
+      await instance.delete(id);
       return true;
     } catch (error) {
       console.error('Error deleting saved filter view:', error);
@@ -105,21 +108,27 @@ class SavedFilterView {
   // Set a filter view as default (and unset others for the same user/facility)
   static async setAsDefault(id, userId, facilityId) {
     try {
+      const instance = new SavedFilterView();
+      
       // First, unset all other default filter views for this user/facility
-      const query = FirestoreService.collection('savedFilterViews')
-        .where('userId', '==', userId)
-        .where('facilityId', '==', facilityId)
-        .where('isDefault', '==', true);
-
-      const snapshot = await query.get();
+      const conditions = [
+        { field: 'userId', operator: '==', value: userId },
+        { field: 'facilityId', operator: '==', value: facilityId },
+        { field: 'isDefault', operator: '==', value: true }
+      ];
+      
+      const defaultViews = await instance.query(conditions);
       const batch = FirestoreService.batch();
 
-      snapshot.forEach(doc => {
-        batch.update(doc.ref, { isDefault: false, updatedAt: new Date() });
+      // Unset all existing default views
+      defaultViews.forEach(view => {
+        const docRef = FirestoreService.collection('savedFilterViews').doc(view.id);
+        batch.update(docRef, { isDefault: false, updatedAt: new Date() });
       });
 
       // Set the specified filter view as default
-      batch.update(FirestoreService.collection('savedFilterViews').doc(id), {
+      const targetDocRef = FirestoreService.collection('savedFilterViews').doc(id);
+      batch.update(targetDocRef, {
         isDefault: true,
         updatedAt: new Date()
       });
@@ -135,19 +144,20 @@ class SavedFilterView {
   // Get default filter view for a user in a facility
   static async getDefaultByUserAndFacility(userId, facilityId) {
     try {
-      const query = FirestoreService.collection('savedFilterViews')
-        .where('userId', '==', userId)
-        .where('facilityId', '==', facilityId)
-        .where('isDefault', '==', true)
-        .limit(1);
-
-      const snapshot = await query.get();
-      if (snapshot.empty) {
+      const instance = new SavedFilterView();
+      const conditions = [
+        { field: 'userId', operator: '==', value: userId },
+        { field: 'facilityId', operator: '==', value: facilityId },
+        { field: 'isDefault', operator: '==', value: true }
+      ];
+      
+      const results = await instance.query(conditions);
+      
+      if (results.length === 0) {
         return null;
       }
 
-      const doc = snapshot.docs[0];
-      return new SavedFilterView({ id: doc.id, ...doc.data() });
+      return new SavedFilterView(results[0]);
     } catch (error) {
       console.error('Error getting default filter view:', error);
       throw error;
@@ -172,9 +182,9 @@ class SavedFilterView {
   static validateFilters(filters) {
     const validFilters = ['searchTerm', 'filter', 'assigneeFilter', 'tagFilter', 'priorityFilter'];
     const validFilterValues = {
-      filter: ['all', 'todo', 'in-progress', 'review', 'done'],
-      assigneeFilter: ['all'], // Will be populated with actual assignee names
-      tagFilter: ['all'], // Will be populated with actual tags
+      filter: ['all', 'todo', 'in-progress', 'review', 'done', 'completed', 'active', 'with-tasks', 'empty'],
+      assigneeFilter: ['all'], // Allow any string value for assignee names
+      tagFilter: ['all'], // Allow any string value for tag names
       priorityFilter: ['all', 'low', 'medium', 'high', 'urgent']
     };
 
@@ -186,6 +196,11 @@ class SavedFilterView {
       if (key === 'searchTerm') {
         if (typeof value !== 'string') {
           throw new Error('searchTerm must be a string');
+        }
+      } else if (key === 'assigneeFilter' || key === 'tagFilter') {
+        // Allow any string value for assignee and tag filters
+        if (typeof value !== 'string') {
+          throw new Error(`${key} must be a string`);
         }
       } else if (key !== 'searchTerm' && validFilterValues[key]) {
         if (!validFilterValues[key].includes(value)) {
