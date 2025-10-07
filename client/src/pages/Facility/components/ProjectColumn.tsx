@@ -42,6 +42,7 @@ interface ProjectColumnProps {
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
   facilityId?: string;
   selectedProjectId?: string | null;
+  availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
 }
 
 const ProjectColumn: React.FC<ProjectColumnProps> = ({
@@ -75,6 +76,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
   onTaskMove,
   facilityId,
   selectedProjectId,
+  availableAssignees,
 }) => {
   const { hasPermission } = usePermissions();
   // State for status dropdown
@@ -392,6 +394,7 @@ const ProjectColumn: React.FC<ProjectColumnProps> = ({
                 handleOpenTaskDetail={handleOpenTaskDetail}
                 onTaskMove={onTaskMove}
                 facilityId={facilityId}
+                availableAssignees={availableAssignees}
               />
             ))
           )}

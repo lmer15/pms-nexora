@@ -45,6 +45,11 @@ class CacheService {
     this.cache.clear();
   }
 
+  // Alias for clear() to match the expected interface
+  clearAll(): void {
+    this.clear();
+  }
+
   // Cache facility data
   getFacility(facilityId: string) {
     return this.get(this.generateKey('facility', facilityId));
@@ -59,7 +64,7 @@ class CacheService {
     return this.get(this.generateKey('facility_stats', facilityId));
   }
 
-  setFacilityStats(facilityId: string, stats: any, ttl: number = 60 * 60 * 1000) { // EMERGENCY: Extended to 1 hour to reduce reads
+  setFacilityStats(facilityId: string, stats: any, ttl: number = 5 * 60 * 1000) { // 5 minutes - reasonable for stats
     this.set(this.generateKey('facility_stats', facilityId), stats, ttl);
   }
 
@@ -78,7 +83,7 @@ class CacheService {
     return this.get(key);
   }
 
-  setProjectTasks(projectId: string, tasks: any[], options?: any, ttl: number = 30 * 60 * 1000) { // EMERGENCY: Extended to 30 minutes to reduce reads
+  setProjectTasks(projectId: string, tasks: any[], options?: any, ttl: number = 2 * 60 * 1000) { // 2 minutes - reasonable for tasks
     const key = this.generateKey('project_tasks', projectId, JSON.stringify(options || {}));
     this.set(key, tasks, ttl);
   }
@@ -89,7 +94,7 @@ class CacheService {
     return this.get(key);
   }
 
-  setUserProfiles(userIds: string[], profiles: any, ttl: number = 2 * 60 * 60 * 1000) { // EMERGENCY: Extended to 2 hours to reduce reads
+  setUserProfiles(userIds: string[], profiles: any, ttl: number = 10 * 60 * 1000) { // 10 minutes - reasonable for user profiles
     const key = this.generateKey('user_profiles', userIds.sort().join(','));
     this.set(key, profiles, ttl);
   }
@@ -142,6 +147,31 @@ class CacheService {
   // Get cache keys for debugging
   getCacheKeys(): string[] {
     return Array.from(this.cache.keys());
+  }
+
+  // Clear all cache for a specific facility
+  clearFacilityCache(facilityId: string) {
+    const keysToDelete: string[] = [];
+    this.cache.forEach((_, key) => {
+      if (key.includes(`facility:${facilityId}`) || 
+          key.includes(`facility_stats:${facilityId}`) ||
+          key.includes(`projects:${facilityId}`)) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach(key => this.delete(key));
+  }
+
+  // Clear all project-related cache for a facility
+  clearProjectCache(facilityId: string) {
+    const keysToDelete: string[] = [];
+    this.cache.forEach((_, key) => {
+      if (key.includes(`project_tasks:`) || 
+          key.includes(`projects:${facilityId}`)) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach(key => this.delete(key));
   }
 }
 

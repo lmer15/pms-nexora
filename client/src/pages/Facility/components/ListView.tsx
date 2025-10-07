@@ -18,6 +18,7 @@ interface ListViewProps {
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskDelete: (taskId: string, taskTitle: string, columnId: string) => void;
   onTaskMove: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
+  availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
 }
 
 interface FlattenedTask extends Task {
@@ -35,6 +36,7 @@ const ListView: React.FC<ListViewProps> = ({
   onTaskUpdate,
   onTaskDelete,
   onTaskMove,
+  availableAssignees,
 }) => {
   const { memberRefreshTriggers, userProfileRefreshTrigger } = useFacilityRefresh();
   const { user } = useAuth();
@@ -104,38 +106,24 @@ const ListView: React.FC<ListViewProps> = ({
   }, [columns]);
 
   // Fetch facility members for all tasks
+  // Convert availableAssignees prop to facilityMembers lookup
   useEffect(() => {
-    const fetchFacilityMembers = async () => {
-      if (!facilityId || localColumns.length === 0) return;
-      
-      setLoadingProfiles(true);
-      try {
-        const members = await facilityService.getFacilityMembers(facilityId);
-        
-        // Convert members array to a lookup object
-        const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
-        members.forEach(member => {
-          membersLookup[member.id] = {
-            name: member.name,
-            profilePicture: member.profilePicture
-          };
-        });
-        
-        setFacilityMembers(membersLookup);
-      } catch (error) {
-        console.error('Failed to fetch facility members:', error);
-        setFacilityMembers({});
-      } finally {
-        setLoadingProfiles(false);
-      }
-    };
+    if (availableAssignees && availableAssignees.length > 0) {
+      const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
+      availableAssignees.forEach(member => {
+        membersLookup[member.id] = {
+          name: member.name,
+          profilePicture: member.profilePicture
+        };
+      });
+      setFacilityMembers(membersLookup);
+      setLoadingProfiles(false);
+    }
+  }, [availableAssignees]);
 
-    fetchFacilityMembers();
-  }, [facilityId, localColumns, memberRefreshTriggers[facilityId || '']]);
-
-  // Comprehensive subtask loading with intelligent rate limiting
+  // Optimized batch subtask loading with request deduplication
   useEffect(() => {
-    const fetchSubtasksIntelligently = async () => {
+    const fetchSubtasksBatch = async () => {
       if (localColumns.length === 0) return;
       
       // Collect all unique task IDs that haven't been loaded yet
@@ -154,96 +142,38 @@ const ListView: React.FC<ListViewProps> = ({
       setLoadingSubtasks(true);
       setSubtaskProgress({ loaded: 0, total: taskIds.length });
       
-      // Request queue with intelligent throttling
-      const processRequestQueue = async () => {
-        const baseDelay = 2000; // Base 2 second delay
-        const maxDelay = 10000; // Maximum 10 second delay
-        let currentDelay = baseDelay;
-        let consecutiveErrors = 0;
-        let loadedCount = 0;
-        
-        for (let i = 0; i < taskIds.length; i++) {
-          const taskId = taskIds[i];
-          
-          try {
-            // Add jitter to prevent thundering herd
-            const jitter = Math.random() * 1000; // 0-1 second jitter
-            const actualDelay = currentDelay + jitter;
-            
-            if (i > 0) {
-              await new Promise(resolve => setTimeout(resolve, actualDelay));
-            }
-            
-            const subtasks = await taskService.getSubtasks(taskId);
-            
-            // Success - reset error handling
-            consecutiveErrors = 0;
-            currentDelay = baseDelay;
-            
-            setTaskSubtasks(prev => ({
-              ...prev,
-              [taskId]: subtasks || []
-            }));
-            setLoadedSubtasks(prev => new Set([...prev, taskId]));
-            
-            loadedCount++;
-            setSubtaskProgress({ loaded: loadedCount, total: taskIds.length });
-            
-            console.log(`✅ Loaded subtasks for task ${taskId} (${loadedCount}/${taskIds.length})`);
-            
-          } catch (error: any) {
-            consecutiveErrors++;
-            
-            // Handle different types of errors
-            if (error.response?.status === 429) {
-              // Rate limited - increase delay significantly
-              currentDelay = Math.min(currentDelay * 2, maxDelay);
-              console.warn(`⏳ Rate limited for task ${taskId}, increasing delay to ${currentDelay}ms`);
-              
-              // Add extra delay for rate limiting
-              await new Promise(resolve => setTimeout(resolve, currentDelay));
-              
-              // Retry the same task
-              i--;
-              continue;
-              
-            } else if (error.response?.status >= 500) {
-              // Server error - moderate delay
-              currentDelay = Math.min(currentDelay * 1.5, maxDelay);
-              console.warn(`🔧 Server error for task ${taskId}, retrying with delay ${currentDelay}ms`);
-              
-              // Retry the same task
-              i--;
-              continue;
-              
-            } else {
-              // Client error or other - skip this task
-              console.warn(`❌ Failed to fetch subtasks for task ${taskId}:`, error.message);
-              setTaskSubtasks(prev => ({
-                ...prev,
-                [taskId]: []
-              }));
-              setLoadedSubtasks(prev => new Set([...prev, taskId]));
-              
-              loadedCount++;
-              setSubtaskProgress({ loaded: loadedCount, total: taskIds.length });
-            }
-            
-            // If too many consecutive errors, add extra delay
-            if (consecutiveErrors >= 3) {
-              console.warn(`⚠️ Too many consecutive errors (${consecutiveErrors}), adding extra delay`);
-              await new Promise(resolve => setTimeout(resolve, 5000));
-              consecutiveErrors = 0;
-            }
-          }
-        }
-      };
       
       try {
-        await processRequestQueue();
-        console.log(`🎉 Completed loading subtasks for ${taskIds.length} tasks`);
+        // Use the new batch loading method
+        const subtasksResults = await taskService.getSubtasksBatch(taskIds);
+        
+        // Update state with all results
+        setTaskSubtasks(prev => ({
+          ...prev,
+          ...subtasksResults
+        }));
+        
+        // Mark all tasks as loaded
+        setLoadedSubtasks(prev => new Set([...prev, ...taskIds]));
+        
+        // Update progress
+        setSubtaskProgress({ loaded: taskIds.length, total: taskIds.length });
+        
+        
       } catch (error) {
-        console.error('💥 Critical error in subtask loading:', error);
+        console.error('💥 Critical error in batch subtask loading:', error);
+        
+        // Fallback: mark all tasks as loaded with empty subtasks to prevent infinite retries
+        setTaskSubtasks(prev => {
+          const fallbackResults: Record<string, any[]> = {};
+          taskIds.forEach(taskId => {
+            fallbackResults[taskId] = [];
+          });
+          return { ...prev, ...fallbackResults };
+        });
+        
+        setLoadedSubtasks(prev => new Set([...prev, ...taskIds]));
+        setSubtaskProgress({ loaded: taskIds.length, total: taskIds.length });
       } finally {
         setLoadingSubtasks(false);
       }
@@ -255,8 +185,7 @@ const ListView: React.FC<ListViewProps> = ({
     );
     
     if (hasNewTasks) {
-      console.log(`🚀 Starting intelligent subtask loading for ${localColumns.reduce((acc, col) => acc + col.tasks.length, 0)} tasks`);
-      fetchSubtasksIntelligently();
+      fetchSubtasksBatch();
     }
   }, [localColumns, loadedSubtasks]);
 

@@ -1,5 +1,6 @@
 import api from './api';
 import cacheService from '../services/cacheService';
+import jwtUtils from '../utils/jwtUtils';
 
 export interface Facility {
   id: string;
@@ -43,11 +44,13 @@ export const facilityService = {
   },
 
   // Get facility by ID
-  getById: async (id: string): Promise<Facility> => {
-    // Check cache first
-    const cached = cacheService.getFacility(id) as Facility | null;
-    if (cached) {
-      return cached;
+  getById: async (id: string, forceRefresh: boolean = false): Promise<Facility> => {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cached = cacheService.getFacility(id) as Facility | null;
+      if (cached) {
+        return cached;
+      }
     }
 
     const response = await api.get(`/facilities/${id}`);
@@ -95,7 +98,6 @@ export const facilityService = {
       
       // Use cache if less than 1 minute old
       if (now - cacheTime < 60000) {
-        console.log('Using cached user role for facility:', facilityId);
         return parsedData.data;
       }
     }
@@ -115,7 +117,13 @@ export const facilityService = {
       // If the endpoint doesn't exist, fall back to fetching all members
       console.log('User role endpoint not available, falling back to members list');
       const members = await facilityService.getFacilityMembers(facilityId);
-      const currentUser = members.find(member => member.id === localStorage.getItem('userId'));
+      const currentUserId = jwtUtils.getCurrentUserId();
+      
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
+      }
+      
+      const currentUser = members.find(member => member.id === currentUserId);
       
       if (currentUser) {
         return { role: currentUser.role, isOwner: currentUser.isOwner };
@@ -132,12 +140,29 @@ export const facilityService = {
     console.log('Cleared user role cache for facility:', facilityId);
   },
 
+  // Clear all facility-related localStorage cache
+  clearFacilityLocalStorageCache: (facilityId: string): void => {
+    const keysToRemove = [
+      `user_role_${facilityId}`,
+      `facility_members_${facilityId}`,
+      `facility_data_${facilityId}_true`,
+      `facility_data_${facilityId}_false`
+    ];
+    
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+    });
+    
+  },
+
   // Get facility statistics
-  getFacilityStats: async (facilityId: string): Promise<FacilityStats> => {
-    // Check cache first
-    const cached = cacheService.getFacilityStats(facilityId) as FacilityStats | null;
-    if (cached) {
-      return cached;
+  getFacilityStats: async (facilityId: string, forceRefresh: boolean = false): Promise<FacilityStats> => {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cached = cacheService.getFacilityStats(facilityId) as FacilityStats | null;
+      if (cached) {
+        return cached;
+      }
     }
 
     const response = await api.get(`/facilities/${facilityId}/stats`);

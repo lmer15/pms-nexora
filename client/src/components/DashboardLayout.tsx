@@ -28,7 +28,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       '/dashboard': 'Dashboard',
       '/Facilities': 'Facilities Management',
       '/time-log': 'Time Log',
-      '/resource-mgmt': 'Resource Management',
       '/users': 'Users Management',
       '/menu-settings': 'Settings',
       '/notes': 'Notes',

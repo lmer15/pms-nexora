@@ -24,7 +24,7 @@ const taskTimeLogRoutes = require('./taskTimeLogRoutes');
 const taskActivityLogRoutes = require('./taskActivityLogRoutes');
 
 // Apply rate limiting and sanitization to all routes
-router.use(rateLimit(500, 15 * 60 * 1000)); // 500 requests per 15 minutes (increased for development)
+router.use(rateLimit(2000, 15 * 60 * 1000)); // 2000 requests per 15 minutes (increased for development)
 router.use(sanitizeInput);
 
 // Routes

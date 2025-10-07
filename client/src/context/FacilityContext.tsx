@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { facilityService, Facility } from '../api/facilityService';
 import { useAuth } from './AuthContext';
 
@@ -35,7 +35,7 @@ export const FacilityProvider: React.FC<FacilityProviderProps> = ({ children }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadFacilities = async () => {
+  const loadFacilities = useCallback(async () => {
     if (!token) {
       setFacilities([]);
       setCurrentFacility(null);
@@ -66,11 +66,11 @@ export const FacilityProvider: React.FC<FacilityProviderProps> = ({ children }) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
-  const refreshFacilities = async () => {
+  const refreshFacilities = useCallback(async () => {
     await loadFacilities();
-  };
+  }, [loadFacilities]);
 
   const setCurrentFacilityById = (facilityId: string) => {
     const facility = facilities.find(f => f.id === facilityId);
@@ -87,7 +87,8 @@ export const FacilityProvider: React.FC<FacilityProviderProps> = ({ children }) 
       setFacilities([]);
       setCurrentFacility(null);
     }
-  }, [token]);
+  }, [token, loadFacilities]);
+
 
   const value = {
     facilities,

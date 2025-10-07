@@ -15,6 +15,7 @@ import {
   LucideLogOut,
   LucideChevronDown,
   LucideX,
+  LucideBarChart3,
 } from 'lucide-react';
 import { facilityService, Facility } from '../api/facilityService';
 import { useFacility } from '../context/FacilityContext';
@@ -112,25 +113,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               </NavLink>
             </Tooltip>
 
-            <Tooltip content="Resource Management" position="right" disabled={!isCollapsed}>
-              <NavLink
-                to="/resource-mgmt"
-                className={({ isActive }) =>
-                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
-                    isCollapsed ? 'justify-center' : 'justify-start'
-                  } ${
-                    isActive
-                      ? 'bg-brand text-white shadow-sm'
-                      : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
-                  }`
-                }
-              >
-                <LucideClipboardList className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
-                {!isCollapsed && <span className="ml-2 text-sm leading-none">Resource Mgmt</span>}
-              </NavLink>
-            </Tooltip>
 
             <Tooltip content="Time Log" position="right" disabled={!isCollapsed}>
               <NavLink
@@ -209,6 +191,26 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               >
                 <LucideUsers className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
                 {!isCollapsed && <span className="ml-2 text-sm leading-none">Users</span>}
+              </NavLink>
+            </Tooltip>
+
+            <Tooltip content="Resource Analytics" position="right" disabled={!isCollapsed}>
+              <NavLink
+                to="/resources/analytics/global"
+                className={({ isActive }) =>
+                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
+                    isCollapsed ? 'justify-center' : 'justify-start'
+                  } ${
+                    isActive
+                      ? 'bg-brand text-white shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                  }`
+                }
+              >
+                <LucideBarChart3 className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
+                {!isCollapsed && <span className="ml-2 text-sm leading-none">Analytics</span>}
               </NavLink>
             </Tooltip>
 

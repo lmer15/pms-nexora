@@ -1,6 +1,7 @@
 import axios from 'axios';
 import api from './api';
 import cacheService from '../services/cacheService';
+import requestManager from '../services/requestManager';
 
 // Cache for task details to prevent duplicate requests
 const taskDetailsCache = new Map<string, Promise<TaskDetails> | TaskDetails>();
@@ -410,10 +411,12 @@ const taskService = {
 
   // Subtasks
   getSubtasks: async (taskId: string): Promise<TaskSubtask[]> => {
-    return await retryWithBackoff(async () => {
-      const response = await api.get(`/tasks/${taskId}/subtasks`);
-      return response.data;
-    });
+    return await requestManager.getSubtasks(taskId);
+  },
+
+  // Batch load subtasks for multiple tasks
+  getSubtasksBatch: async (taskIds: string[]): Promise<Record<string, TaskSubtask[]>> => {
+    return await requestManager.getSubtasksBatch(taskIds);
   },
 
   createSubtask: async (taskId: string, subtaskData: { title: string; description?: string }): Promise<TaskSubtask> => {

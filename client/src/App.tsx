@@ -4,6 +4,7 @@ import { useAuth } from "./context/AuthContext";
 import { CurrentFacilityProvider } from "./context/CurrentFacilityContext";
 import { FacilityProvider } from "./context/FacilityContext";
 import { FacilityRefreshProvider } from "./context/FacilityRefreshContext";
+import { FacilityProjectDataProvider } from "./context/FacilityProjectDataContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
 import AcceptInvitation from "./pages/AcceptInvitation";
@@ -12,11 +13,13 @@ import FacilityDashboard from "./pages/Dashboard/FacilityDashboard";
 import Facilities from "./pages/Facilities";
 import FacilityView from "./pages/Facility/FacilityView";
 import TimeLog from "./pages/TimeLog";
-import ResourceMgmt from "./pages/ResourceMgmt";
 import Users from "./pages/Users";
 import MenuSettings from "./pages/MenuSettings";
 import Notes from "./pages/Notes";
 import Meetings from "./pages/Meetings";
+import GlobalAnalyticsPage from "./pages/analytics/global";
+import FacilityAnalyticsPage from "./pages/analytics/facility/[facilityId]";
+import MemberAnalyticsPage from "./pages/analytics/member/[memberId]";
 import DashboardLayout from "./components/DashboardLayout";
 import PrivateRoute from "./routes/PrivateRoute";
 import LoadingAnimation from "./components/LoadingAnimation";
@@ -26,7 +29,9 @@ export default function App() {
     <CurrentFacilityProvider>
       <FacilityProvider>
         <FacilityRefreshProvider>
-          <AppContent />
+          <FacilityProjectDataProvider>
+            <AppContent />
+          </FacilityProjectDataProvider>
         </FacilityRefreshProvider>
       </FacilityProvider>
     </CurrentFacilityProvider>
@@ -90,16 +95,6 @@ function AppContent() {
         }
       />
       <Route
-        path="/resource-mgmt"
-        element={
-          <PrivateRoute>
-            <DashboardLayout>
-              <ResourceMgmt />
-            </DashboardLayout>
-          </PrivateRoute>
-        }
-      />
-      <Route
         path="/users"
         element={
           <PrivateRoute>
@@ -135,6 +130,36 @@ function AppContent() {
           <PrivateRoute>
             <DashboardLayout>
               <Meetings />
+            </DashboardLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/resources/analytics/global"
+        element={
+          <PrivateRoute>
+            <DashboardLayout>
+              <GlobalAnalyticsPage />
+            </DashboardLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/resources/analytics/facility/:facilityId"
+        element={
+          <PrivateRoute>
+            <DashboardLayout>
+              <FacilityAnalyticsPage />
+            </DashboardLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/resources/analytics/member/:memberId"
+        element={
+          <PrivateRoute>
+            <DashboardLayout>
+              <MemberAnalyticsPage />
             </DashboardLayout>
           </PrivateRoute>
         }

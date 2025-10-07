@@ -45,6 +45,7 @@ interface KanbanBoardProps {
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
   facilityId?: string;
   selectedProjectId?: string | null;
+  availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -86,6 +87,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTaskMove,
   facilityId,
   selectedProjectId,
+  availableAssignees,
 }) => {
   const [activeTask, setActiveTask] = React.useState<any>(null);
 
@@ -165,6 +167,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onTaskMove={onTaskMove}
           facilityId={facilityId}
           selectedProjectId={selectedProjectId}
+          availableAssignees={availableAssignees}
         />
           ))}
 

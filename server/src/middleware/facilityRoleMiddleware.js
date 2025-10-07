@@ -168,6 +168,31 @@ const validateRole = (req, res, next) => {
   next();
 };
 
+// Simple middleware to require facility access
+const requireFacilityAccess = async (req, res, next) => {
+  try {
+    const { facilityId } = req.params;
+    const userId = req.user.id;
+
+    if (!facilityId) {
+      return res.status(400).json({ message: 'Facility ID is required' });
+    }
+
+    // Check if user has access to this facility
+    const userFacility = await UserFacility.findByUserAndFacility(userId, facilityId);
+    
+    if (!userFacility) {
+      return res.status(403).json({ message: 'Access denied to this facility' });
+    }
+
+    req.facilityAccess = userFacility;
+    next();
+  } catch (error) {
+    console.error('Error in requireFacilityAccess:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   checkFacilityRole,
   canManageMembers,
@@ -178,5 +203,6 @@ module.exports = {
   canManageJoinRequests,
   canUpdateMemberRole,
   validateRole,
+  requireFacilityAccess,
   ROLE_HIERARCHY
 };

@@ -20,25 +20,8 @@ exports.getFacilities = async (req, res) => {
   try {
     const facilities = await Facility.findByMember(req.userId);
     
-    // Convert database user IDs to Firebase UIDs for ownerId field
-    const User = require('../models/User');
-    const facilitiesWithFirebaseUids = await Promise.all(
-      facilities.map(async (facility) => {
-        // If ownerId looks like a database ID, try to convert to Firebase UID
-        if (facility.ownerId && !facility.ownerId.includes('_') && facility.ownerId.length < 28) {
-          try {
-            const ownerUser = await User.findById(facility.ownerId);
-            if (ownerUser && ownerUser.firebaseUid) {
-              console.log(`Converting facility ${facility.id} ownerId from ${facility.ownerId} to ${ownerUser.firebaseUid}`);
-              return { ...facility, ownerId: ownerUser.firebaseUid };
-            }
-          } catch (error) {
-            console.log('Could not convert ownerId for facility', facility.id, 'using as-is');
-          }
-        }
-        return facility;
-      })
-    );
+    // Keep database user IDs for consistency with JWT tokens
+    const facilitiesWithFirebaseUids = facilities;
     
     // Get statistics for each facility efficiently with caching
     const facilitiesWithStats = await Promise.all(
@@ -268,15 +251,9 @@ exports.createFacility = async (req, res) => {
     const cacheService = require('../services/cacheService');
     const User = require('../models/User');
     
-    // Get the user to find their Firebase UID
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Use Firebase UID as ownerId for consistency with client-side
-    const ownerId = user.firebaseUid;
-    console.log('createFacility: Using Firebase UID as ownerId:', ownerId, 'for database user:', req.userId);
+    // Use database user ID as ownerId for consistency with JWT tokens
+    const ownerId = req.userId;
+    console.log('createFacility: Using database user ID as ownerId:', ownerId);
     const facilityData = { ...req.body };
     delete facilityData.ownerId; // Remove ownerId from body, use authenticated user
     delete facilityData.location; // Remove location from facility data
@@ -284,7 +261,7 @@ exports.createFacility = async (req, res) => {
 
     // Add owner to UserFacility collection for proper authorization
     try {
-      console.log(`Adding owner ${ownerId} (Firebase UID) to facility ${facility.id} with role 'owner'`);
+      console.log(`Adding owner ${ownerId} (database user ID) to facility ${facility.id} with role 'owner'`);
       const ownerRelationship = await UserFacility.addUserToFacility(ownerId, facility.id, 'owner');
       console.log('Owner relationship created:', ownerRelationship);
     } catch (userFacilityError) {
@@ -569,7 +546,7 @@ exports.searchUsers = async (req, res) => {
 
     // Format user data for frontend
     const formattedUsers = users.slice(0, 10).map(user => ({
-      id: user.firebaseUid,
+      id: user.id,
       email: user.email,
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User',
       firstName: user.firstName,
@@ -715,32 +692,32 @@ exports.getFacilityMembers = async (req, res) => {
         try {
           
           // Try multiple approaches to find the user
-          let user = await User.findByFirebaseUid(relation.userId);
+          let user = await User.findById(relation.userId);
           
           if (!user) {
-            // Try finding by document ID as fallback
-            user = await User.findById(relation.userId);
+            // Try finding by Firebase UID as fallback
+            user = await User.findByFirebaseUid(relation.userId);
           }
           
-          // If we found user by database ID, we need to use their Firebase UID for consistency
-          let userFirebaseUid = relation.userId;
-          if (user && user.firebaseUid && relation.userId !== user.firebaseUid) {
-            userFirebaseUid = user.firebaseUid;
+          // Use database user ID for consistency with JWT tokens
+          let userDatabaseId = relation.userId;
+          if (user && user.id && relation.userId !== user.id) {
+            userDatabaseId = user.id;
           }
           
           if (!user) {
             // Return basic info with the user ID as fallback
             return {
-              id: userFirebaseUid,
+              id: userDatabaseId,
               relationshipId: relation.id,
-              name: `User ${userFirebaseUid.substring(0, 8)}...`,
-              email: `user-${userFirebaseUid.substring(0, 8)}@unknown.com`,
-              username: `user-${userFirebaseUid.substring(0, 8)}`,
+              name: `User ${userDatabaseId.substring(0, 8)}...`,
+              email: `user-${userDatabaseId.substring(0, 8)}@unknown.com`,
+              username: `user-${userDatabaseId.substring(0, 8)}`,
               role: relation.role,
               joinedAt: relation.joinedAt,
               profilePicture: null,
-              avatarColor: generateAvatarColor(userFirebaseUid),
-              isOwner: userFirebaseUid === facility.ownerId
+              avatarColor: generateAvatarColor(userDatabaseId),
+              isOwner: userDatabaseId === facility.ownerId
             };
           }
 
@@ -762,30 +739,30 @@ exports.getFacilityMembers = async (req, res) => {
 
 
           return {
-            id: userFirebaseUid,
+            id: userDatabaseId,
             relationshipId: relation.id,
             name: fullName,
-            email: user.email || `user-${userFirebaseUid.substring(0, 8)}@unknown.com`,
-            username: user.email ? user.email.split('@')[0] : `user-${userFirebaseUid.substring(0, 8)}`,
+            email: user.email || `user-${userDatabaseId.substring(0, 8)}@unknown.com`,
+            username: user.email ? user.email.split('@')[0] : `user-${userDatabaseId.substring(0, 8)}`,
             role: relation.role,
             joinedAt: relation.joinedAt,
             profilePicture: user.profilePicture || null,
-            avatarColor: generateAvatarColor(user.email || userFirebaseUid),
-            isOwner: userFirebaseUid === facility.ownerId
+            avatarColor: generateAvatarColor(user.email || userDatabaseId),
+            isOwner: userDatabaseId === facility.ownerId
           };
         } catch (userError) {
           console.error(`Error fetching user details for ${relation.userId}:`, userError);
           return {
-            id: userFirebaseUid,
+            id: userDatabaseId,
             relationshipId: relation.id,
-            name: `User ${userFirebaseUid.substring(0, 8)}...`,
-            email: `user-${userFirebaseUid.substring(0, 8)}@error.com`,
-            username: `user-${userFirebaseUid.substring(0, 8)}`,
+            name: `User ${userDatabaseId.substring(0, 8)}...`,
+            email: `user-${userDatabaseId.substring(0, 8)}@error.com`,
+            username: `user-${userDatabaseId.substring(0, 8)}`,
             role: relation.role,
             joinedAt: relation.joinedAt,
             profilePicture: null,
-            avatarColor: generateAvatarColor(userFirebaseUid),
-            isOwner: userFirebaseUid === facility.ownerId
+            avatarColor: generateAvatarColor(userDatabaseId),
+            isOwner: userDatabaseId === facility.ownerId
           };
         }
       })
@@ -1146,17 +1123,11 @@ exports.joinViaShareLink = async (req, res) => {
       return res.status(404).json({ message: 'Invalid or expired share link' });
     }
 
-    // Get the user to find their Firebase UID
-    const User = require('../models/User');
-    const user = await User.findById(joiningUserId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    const userFirebaseUid = user.firebaseUid;
+    // Use database user ID directly
+    const userDatabaseId = joiningUserId;
 
-    // Check if user is already a member (using Firebase UID)
-    const existingMembership = await UserFacility.findByUserAndFacility(userFirebaseUid, shareLink.facilityId);
+    // Check if user is already a member (using database user ID)
+    const existingMembership = await UserFacility.findByUserAndFacility(userDatabaseId, shareLink.facilityId);
     if (existingMembership && existingMembership.length > 0) {
       return res.status(400).json({ message: 'You are already a member of this facility' });
     }
@@ -1164,11 +1135,11 @@ exports.joinViaShareLink = async (req, res) => {
     // Use the share link (this will validate expiration and usage limits)
     await FacilityShareLink.useShareLink(shareLink.id);
 
-    // Add user to facility using Firebase UID
-    await UserFacility.addUserToFacility(userFirebaseUid, shareLink.facilityId, shareLink.role);
+    // Add user to facility using database user ID
+    await UserFacility.addUserToFacility(userDatabaseId, shareLink.facilityId, shareLink.role);
 
     // Invalidate cache for the new member so they can see the facility immediately
-    cacheService.invalidateUserFacilities(userFirebaseUid);
+    cacheService.invalidateUserFacilities(userDatabaseId);
     cacheService.invalidateFacilityStats(shareLink.facilityId);
     cacheService.invalidateFacilityMembers(shareLink.facilityId);
 
@@ -1363,20 +1334,14 @@ exports.approveJoinRequest = async (req, res) => {
     // Approve the request
     const request = await FacilityJoinRequest.approveJoinRequest(requestId, approvedBy, assignedRole);
 
-    // Get the user to find their Firebase UID
-    const User = require('../models/User');
-    const user = await User.findById(request.requestingUserId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    const userFirebaseUid = user.firebaseUid;
+    // Use database user ID directly
+    const userDatabaseId = request.requestingUserId;
 
-    // Add user to facility using Firebase UID
-    await UserFacility.addUserToFacility(userFirebaseUid, request.facilityId, assignedRole);
+    // Add user to facility using database user ID
+    await UserFacility.addUserToFacility(userDatabaseId, request.facilityId, assignedRole);
 
     // Invalidate cache for the new member so they can see the facility immediately
-    cacheService.invalidateUserFacilities(userFirebaseUid);
+    cacheService.invalidateUserFacilities(userDatabaseId);
     cacheService.invalidateFacilityStats(request.facilityId);
     cacheService.invalidateFacilityMembers(request.facilityId);
 
@@ -1530,20 +1495,14 @@ exports.acceptInvitation = async (req, res) => {
     // Accept the invitation
     const invitation = await FacilityInvitation.acceptInvitation(token, acceptingUserId);
 
-    // Get the user to find their Firebase UID
-    const User = require('../models/User');
-    const user = await User.findById(acceptingUserId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    const userFirebaseUid = user.firebaseUid;
+    // Use database user ID directly
+    const userDatabaseId = acceptingUserId;
 
-    // Add user to facility using Firebase UID
-    await UserFacility.addUserToFacility(userFirebaseUid, invitation.facilityId, invitation.role);
+    // Add user to facility using database user ID
+    await UserFacility.addUserToFacility(userDatabaseId, invitation.facilityId, invitation.role);
 
     // Invalidate cache for the new member so they can see the facility immediately
-    cacheService.invalidateUserFacilities(userFirebaseUid);
+    cacheService.invalidateUserFacilities(userDatabaseId);
     cacheService.invalidateFacilityStats(invitation.facilityId);
     cacheService.invalidateFacilityMembers(invitation.facilityId);
 

@@ -1,0 +1,27 @@
+{
+  "cache": {
+    "ttl": 300,
+    "maxSize": 1000
+  },
+  "export": {
+    "timeout": 120,
+    "maxFileSize": "50MB",
+    "tempDir": "./temp"
+  },
+  "insights": {
+    "maxInsights": 4,
+    "rules": {
+      "overloadThreshold": 100,
+      "cautionThreshold": 80,
+      "lowUtilizationThreshold": 40,
+      "trendThreshold": 10
+    }
+  },
+  "performance": {
+    "pagination": {
+      "defaultPageSize": 50,
+      "maxPageSize": 100
+    },
+    "largeFacilityThreshold": 100
+  }
+}

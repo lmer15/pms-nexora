@@ -418,7 +418,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-60">
+    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black bg-opacity-60">
       <div className={`w-full max-w-lg mx-4 rounded-lg shadow-2xl ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
         {/* Header */}
         <div className={`px-6 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
@@ -532,7 +532,7 @@ const ShareFacilityModal: React.FC<ShareFacilityModalProps> = ({ isOpen, onClose
 
             {/* Search Results Dropdown */}
             {showDropdown && (searchResults.length > 0 || emailOrName.trim().length >= 2) && (
-              <div className={`absolute top-full left-0 right-0 mt-1 rounded-md shadow-lg z-[10000] max-h-60 overflow-y-auto ${
+              <div className={`absolute top-full left-0 right-0 mt-1 rounded-md shadow-lg z-[5001] max-h-60 overflow-y-auto ${
                 isDarkMode ? 'bg-gray-800 border border-gray-600' : 'bg-white border border-gray-300'
               }`}>
                 {searchResults.length > 0 ? (

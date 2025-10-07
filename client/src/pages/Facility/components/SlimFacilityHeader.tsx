@@ -187,7 +187,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
   return (
     <>
       <div 
-        className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} transition-all duration-300 relative`} 
+        className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} transition-all duration-300 relative z-[1000]`} 
         style={{ 
           margin: 0, 
           padding: 0, 
@@ -319,7 +319,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
 
         {/* Collapsible Filters Row - Completely hidden when collapsed */}
         {isFiltersOpen && !isCollapsed && (
-          <div className={`px-6 py-3 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} transition-all duration-300 relative z-[100]`}>
+          <div className={`px-6 py-3 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} transition-all duration-300 relative z-[1000]`}>
             <div className="flex items-center space-x-4">
               {/* Quick Filter Chips */}
               <div className="flex items-center space-x-1">
@@ -342,7 +342,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
               </div>
               
               {/* Basic Filter Dropdowns */}
-              <div className="flex items-center space-x-1 relative" style={{ zIndex: 1001 }}>
+              <div className="flex items-center space-x-1 relative z-[1001]">
                 {/* Assignee Filter */}
                 <div className="relative filter-dropdown">
                   <button
@@ -382,7 +382,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isAssigneeDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
+                    <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1002]">
                       <div className="py-1">
                         <button
                           onClick={() => {
@@ -455,7 +455,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isPriorityDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
+                    <div className="absolute top-full left-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1002]">
                       <div className="py-1">
                         {['all', 'high', 'medium', 'low'].map((priority) => (
                           <button
@@ -495,7 +495,7 @@ const SlimFacilityHeader: React.FC<SlimFacilityHeaderProps> = ({
                     <LucideChevronDown className="w-3 h-3" />
                   </button>
                   {isTagDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1000]">
+                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[1002]">
                       <div className="py-1">
                         <button
                           onClick={() => {

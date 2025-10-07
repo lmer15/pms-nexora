@@ -34,6 +34,7 @@ interface TaskCardProps {
   isDeleting?: boolean;
   onTaskMove?: (taskId: string, fromColumnId: string, toColumnId: string, newIndex: number) => void;
   facilityId?: string;
+  availableAssignees?: Array<{id: string, name: string, email?: string, profilePicture?: string}>;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
@@ -45,6 +46,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   isDeleting = false,
   onTaskMove,
   facilityId,
+  availableAssignees,
 }) => {
   const { memberRefreshTriggers, userProfileRefreshTrigger } = useFacilityRefresh();
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -182,35 +184,20 @@ const TaskCard: React.FC<TaskCardProps> = ({
     };
   }, [task.id]); // Use task.id to avoid re-registering on every currentTask change
 
-  // Fetch facility members when task changes or facility members are refreshed
+  // Convert availableAssignees prop to facilityMembers lookup
   useEffect(() => {
-    const fetchFacilityMembers = async () => {
-      if (!facilityId) return;
-      
-      setLoadingProfiles(true);
-      try {
-        const members = await facilityService.getFacilityMembers(facilityId);
-        
-        // Convert members array to a lookup object
-        const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
-        members.forEach(member => {
-          membersLookup[member.id] = {
-            name: member.name,
-            profilePicture: member.profilePicture
-          };
-        });
-        
-        setFacilityMembers(membersLookup);
-      } catch (error) {
-        console.error('Failed to fetch facility members:', error);
-        setFacilityMembers({});
-      } finally {
-        setLoadingProfiles(false);
-      }
-    };
-
-    fetchFacilityMembers();
-  }, [facilityId, memberRefreshTriggers[facilityId || '']]);
+    if (availableAssignees && availableAssignees.length > 0) {
+      const membersLookup: Record<string, {name: string; profilePicture?: string}> = {};
+      availableAssignees.forEach(member => {
+        membersLookup[member.id] = {
+          name: member.name,
+          profilePicture: member.profilePicture
+        };
+      });
+      setFacilityMembers(membersLookup);
+      setLoadingProfiles(false);
+    }
+  }, [availableAssignees]);
 
 
   // Improved click handler with better event detection

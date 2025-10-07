@@ -19,6 +19,8 @@ import RoleManagementModal from '../../components/RoleManagementModal';
 import RoleIndicator from '../../components/RoleIndicator';
 import { RoleGuard, usePermissions } from '../../components/RoleGuard';
 import { useOptimizedProjectManagement } from '../../hooks/useOptimizedProjectManagement';
+import RateLimitStatus from '../../components/RateLimitStatus';
+import '../../utils/resetRateLimiting'; // Initialize reset utilities
 import { useTaskManagement } from '../../hooks/useTaskManagement';
 import { taskService } from '../../api/taskService';
 import { projectService } from '../../api/projectService';
@@ -75,28 +77,20 @@ const FacilityView: React.FC = () => {
   // Handle project status update
   const handleUpdateProjectStatus = async (projectId: string, newStatus: string) => {
     try {
-      // Update UI immediately (optimistic update)
-      setColumns(prevColumns => 
-        prevColumns.map(col => 
-          col.id === projectId 
-            ? { ...col, _status: newStatus, _projectStatus: newStatus, status: newStatus } // Add temporary status for UI
-            : col
-        )
-      );
-      
       const updatedProject = await projectService.update(projectId, { status: newStatus as any });
       
+      // Update projects state (this will be synced to context automatically)
       setProjects(prevProjects => 
         prevProjects.map(project => 
           project.id === projectId ? updatedProject : project
         )
       );
       
-      // Update columns state with the server response
+      // Update columns state (this will be synced to context automatically)
       setColumns(prevColumns => 
         prevColumns.map(col => 
           col.id === projectId 
-            ? { ...col, _status: undefined, _projectStatus: updatedProject.status, status: updatedProject.status }
+            ? { ...col, _projectStatus: updatedProject.status, status: updatedProject.status }
             : col
         )
       );
@@ -194,8 +188,7 @@ const FacilityView: React.FC = () => {
       setShowTaskMoveNotification(true);
     } catch (error) {
       console.error('Failed to move task:', error);
-      // Revert optimistic update on error
-      loadFacilityData();
+      loadFacilityData(true);
     }
   };
 
@@ -265,8 +258,6 @@ const FacilityView: React.FC = () => {
     if (id) {
       loadFacility();
     }
-    
-    // Cleanup: clear facility name when component unmounts
     return () => {
       setCurrentFacilityName(null);
     };
@@ -277,10 +268,15 @@ const FacilityView: React.FC = () => {
 
     try {
       setLoading(true);
+      
+      // Check if we already have facility data to avoid unnecessary refreshes
+      const shouldForceRefresh = !facility || facility.id !== id;
+      
       const [facilityData, statsData] = await Promise.all([
-        facilityService.getById(id),
-        facilityService.getFacilityStats(id)
+        facilityService.getById(id, shouldForceRefresh),
+        facilityService.getFacilityStats(id, shouldForceRefresh)
       ]);
+      
       setFacility(facilityData);
       setFacilityStats(statsData);
       setCurrentFacilityName(facilityData.name);
@@ -387,11 +383,8 @@ const FacilityView: React.FC = () => {
     
     return success;
   };
-  useEffect(() => {
-    if (id) {
-      loadFacilityData();
-    }
-  }, [id]);
+  // Removed this useEffect as it was causing state resets on navigation
+  // The useOptimizedProjectManagement hook now handles data loading properly
 
   // Collect available assignees from facility members
 
@@ -863,6 +856,7 @@ const FacilityView: React.FC = () => {
             onTaskMove={handleTaskMove}
             facilityId={id}
             selectedProjectId={selectedProjectId}
+            availableAssignees={availableAssignees}
           />
         </div>
         
@@ -883,6 +877,7 @@ const FacilityView: React.FC = () => {
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDeleteClick}
               onTaskMove={handleTaskMove}
+              availableAssignees={availableAssignees}
             />
           </div>
         </div>
@@ -1036,6 +1031,9 @@ const FacilityView: React.FC = () => {
         facilityId={facility?.id || ''}
         isDarkMode={isDarkMode}
       />
+
+      {/* Rate Limit Status Monitor (Development Only) */}
+      <RateLimitStatus />
     </div>
   );
 };
