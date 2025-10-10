@@ -1,7 +1,9 @@
 client/.env
 client/node_modules
+client/dist
 server/dist
 server/node_modules
 server/.env
 node_modules
 server/src/config/serviceAccountkey.json
+
