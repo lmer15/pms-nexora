@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 import MemberKpiStrip from './MemberKpiStrip';
 import MemberCharts from './MemberCharts';
 import MemberTimeline from './MemberTimeline';
@@ -15,21 +16,38 @@ import { colors } from '../../../styles/designTokens';
 
 interface MemberDashboardProps {
   className?: string;
+  memberId?: string | null;
+  facilityId?: string | null;
 }
 
 const MemberDashboard: React.FC<MemberDashboardProps> = ({
-  className = ''
+  className = '',
+  memberId: propMemberId,
+  facilityId: propFacilityId
 }) => {
   const navigate = useNavigate();
-  const { memberId } = useParams<{ memberId: string }>();
+  const { memberId: paramMemberId } = useParams<{ memberId: string }>();
+  const memberId = propMemberId || paramMemberId;
+  const { token } = useAuth();
   const [data, setData] = useState<MemberAnalyticsResponse | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('4w');
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
 
   const fetchData = async (range: TimeRange) => {
-    if (!memberId || isNaN(parseInt(memberId))) {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    if (!memberId) {
       setError('Invalid member ID');
       setLoading(false);
       return;
@@ -39,7 +57,8 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
       setLoading(true);
       setError(null);
       
-      const response = await analyticsService.getMemberAnalytics(parseInt(memberId), range);
+      console.log(`[DEBUG] Frontend: Fetching member analytics for memberId: ${memberId}, facilityId: ${propFacilityId}, range: ${range}`);
+      const response = await analyticsService.getMemberAnalytics(memberId, range, propFacilityId || undefined);
       setData(response);
       
       // Generate insights using the insights engine
@@ -54,23 +73,42 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
   };
 
   useEffect(() => {
-    fetchData(timeRange);
-  }, [timeRange, memberId]);
+    if (token) {
+      fetchData(timeRange);
+    } else {
+      setLoading(false);
+    }
+  }, [timeRange, memberId, token]);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   const handleTimeRangeChange = (range: TimeRange) => {
     setTimeRange(range);
   };
 
   const handleTaskClick = (taskId: number) => {
-    // Navigate to task detail - you might need to adjust this route based on your app structure
-    navigate(`/tasks/${taskId}`);
+    const facilityId = new URLSearchParams(window.location.search).get('facilityId');
+    if (facilityId) {
+      navigate(`/facility/${facilityId}`);
+    } else {
+      console.log(`Task ${taskId} details are available in the facility page`);
+    }
   };
 
   const handleExport = async () => {
     if (!memberId) return;
     
     try {
-      await exportService.exportMemberAnalytics(parseInt(memberId), timeRange);
+      await exportService.exportMemberAnalytics(memberId, timeRange);
     } catch (error) {
       console.error('Export failed:', error);
       // You might want to show a toast notification here
@@ -78,8 +116,13 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
   };
 
   const handleBackToFacility = () => {
-    if (data?.member.facilityId) {
-      navigate(`/resources/analytics/facility/${data.member.facilityId}`);
+    // Use the facilityId from props first (passed from Facility Dashboard)
+    // Fall back to data.member.facilityId if available
+    // Finally fall back to global analytics
+    const targetFacilityId = propFacilityId || data?.member.facilityId;
+    
+    if (targetFacilityId) {
+      navigate(`/resources/analytics/facility/${targetFacilityId}`);
     } else {
       navigate('/resources/analytics/global');
     }
@@ -93,30 +136,40 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
             <div className="flex items-center space-x-2 mb-2">
               <button
                 onClick={handleBackToFacility}
-                className="text-sm text-blue-600 hover:underline"
+                className={`text-sm hover:underline transition-colors ${
+                  isDarkMode 
+                    ? 'text-green-400 hover:text-green-300' 
+                    : 'text-green-600 hover:text-green-700'
+                }`}
               >
                 ← Back to Facility Analytics
               </button>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Member Analytics</h1>
-            <p className="text-gray-600">Loading member data...</p>
+            <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Member Analytics
+            </h1>
+            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+              Loading member data...
+            </p>
           </div>
-          <div className="w-32 h-10 bg-gray-200 rounded animate-pulse"></div>
+          <div className={`w-32 h-10 rounded animate-pulse ${
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+          }`}></div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           {[...Array(5)].map((_, i) => (
-            <KPICardSkeleton key={i} />
+            <KPICardSkeleton key={i} isDarkMode={isDarkMode} />
           ))}
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartSkeleton />
-          <ChartSkeleton />
+          <ChartSkeleton isDarkMode={isDarkMode} />
+          <ChartSkeleton isDarkMode={isDarkMode} />
         </div>
         
-        <TableSkeleton />
-        <TableSkeleton />
+        <TableSkeleton isDarkMode={isDarkMode} />
+        <TableSkeleton isDarkMode={isDarkMode} />
       </div>
     );
   }
@@ -124,12 +177,16 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
   if (error) {
     return (
       <div className={`text-center py-12 ${className}`}>
-        <div className="text-red-600 mb-4">
+        <div className={`mb-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
           <svg className="w-16 h-16 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
           </svg>
-          <h3 className="text-lg font-medium mb-2">Error Loading Member Analytics</h3>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <h3 className={`text-lg font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Error Loading Member Analytics
+          </h3>
+          <p className={`mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {error}
+          </p>
           <div className="space-x-4">
             <button
               onClick={() => fetchData(timeRange)}
@@ -139,7 +196,11 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </button>
             <button
               onClick={handleBackToFacility}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                isDarkMode 
+                  ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' 
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
             >
               Back to Facility
             </button>
@@ -152,10 +213,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
   if (!data) {
     return (
       <div className={`text-center py-12 ${className}`}>
-        <p className="text-gray-600">No member data available</p>
+        <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+          No member data available
+        </p>
         <button
           onClick={handleBackToFacility}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
         >
           Back to Facility Analytics
         </button>
@@ -171,17 +234,26 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
           <div className="flex items-center space-x-2 mb-2">
             <button
               onClick={handleBackToFacility}
-              className="text-sm text-blue-600 hover:underline transition-colors"
+              className={`text-sm hover:underline transition-colors ${
+                isDarkMode 
+                  ? 'text-green-400 hover:text-green-300' 
+                  : 'text-green-600 hover:text-green-700'
+              }`}
             >
               ← Back to Facility Analytics
             </button>
+            <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>/</span>
+            <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Member Analytics
+            </span>
           </div>
           
           {/* Member Profile */}
           <div className="flex items-center space-x-4 mb-4">
             <div 
-              className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-xl font-bold"
-              style={{ backgroundColor: colors.border }}
+              className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+              }`}
             >
               {data.member.avatarUrl ? (
                 <img
@@ -190,15 +262,17 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
-                <span style={{ color: colors.neutralText }}>
+                <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
                   {(data.member.name || 'U').split(' ').map(n => n[0]).join('').toUpperCase()}
                 </span>
               )}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{data.member.name || 'Unknown User'}</h1>
-              <p className="text-gray-600">
-                {data.member.role} • Capacity: {data.member.capacity} hours/week
+              <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                {data.member.name || 'Unknown User'}
+              </h1>
+              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+                {data.member.role} • Capacity: {data.member.capacity} hours/week • Individual performance analytics
               </p>
             </div>
           </div>
@@ -208,24 +282,26 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
           <FiltersBar
             timeRange={timeRange}
             onTimeRangeChange={handleTimeRangeChange}
+            isDarkMode={isDarkMode}
           />
-          <ExportButton onExport={handleExport} />
+          <ExportButton onExport={handleExport} isDarkMode={isDarkMode} />
         </div>
       </div>
 
       {/* KPI Strip */}
-      <MemberKpiStrip kpis={data.kpis} />
+      <MemberKpiStrip kpis={data.kpis} isDarkMode={isDarkMode} />
 
       {/* Charts */}
-      <MemberCharts charts={data.charts} />
+      <MemberCharts charts={data.charts} isDarkMode={isDarkMode} />
 
       {/* Timeline and Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <MemberTimeline
           timeline={data.timeline}
           onTaskClick={handleTaskClick}
+          isDarkMode={isDarkMode}
         />
-        <MemberInsights insights={insights} />
+        <MemberInsights insights={insights} isDarkMode={isDarkMode} />
       </div>
     </div>
   );

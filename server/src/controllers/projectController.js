@@ -126,76 +126,100 @@ exports.deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    // Check if project is already deleted
+    if (project.deletedAt) {
+      return res.status(400).json({ message: 'Project is already deleted' });
+    }
 
     // Get all tasks in this project
     const tasks = await Task.findByProject(projectId);
 
-    // Delete all tasks and their related data
+    // Soft delete all tasks and their related data
     const taskDeletePromises = tasks.map(async (task) => {
+      // Skip if task is already deleted
+      if (task.deletedAt) {
+        return;
+      }
       
-      // Delete all task-related data in parallel
+      // Soft delete all task-related data in parallel
       const taskRelatedDeletePromises = [
-        // Delete task comments
+        // Soft delete task comments
         TaskComment.findByTask(task.id).then(comments => {
           if (comments && comments.length > 0) {
-            return Promise.all(comments.map(comment => TaskComment.delete(comment.id)));
+            return Promise.all(comments.map(comment => 
+              TaskComment.update(comment.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         }),
         
-        // Delete task attachments
+        // Soft delete task attachments
         TaskAttachment.findByTask(task.id).then(attachments => {
           if (attachments && attachments.length > 0) {
-            return Promise.all(attachments.map(attachment => TaskAttachment.delete(attachment.id)));
+            return Promise.all(attachments.map(attachment => 
+              TaskAttachment.update(attachment.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         }),
         
-        // Delete task dependencies
+        // Soft delete task dependencies
         TaskDependency.findByTask(task.id).then(dependencies => {
           if (dependencies && dependencies.length > 0) {
-            return Promise.all(dependencies.map(dependency => TaskDependency.delete(dependency.id)));
+            return Promise.all(dependencies.map(dependency => 
+              TaskDependency.update(dependency.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         }),
         
-        // Delete task subtasks
+        // Soft delete task subtasks
         TaskSubtask.findByTask(task.id).then(subtasks => {
           if (subtasks && subtasks.length > 0) {
-            return Promise.all(subtasks.map(subtask => TaskSubtask.delete(subtask.id)));
+            return Promise.all(subtasks.map(subtask => 
+              TaskSubtask.update(subtask.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         }),
         
-        // Delete task time logs
+        // Soft delete task time logs
         TaskTimeLog.findByTask(task.id).then(timeLogs => {
           if (timeLogs && timeLogs.length > 0) {
-            return Promise.all(timeLogs.map(timeLog => TaskTimeLog.delete(timeLog.id)));
+            return Promise.all(timeLogs.map(timeLog => 
+              TaskTimeLog.update(timeLog.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         }),
         
-        // Delete task activity logs
+        // Soft delete task activity logs
         TaskActivityLog.findByTask(task.id).then(activityLogs => {
           if (activityLogs && activityLogs.length > 0) {
-            return Promise.all(activityLogs.map(activityLog => TaskActivityLog.delete(activityLog.id)));
+            return Promise.all(activityLogs.map(activityLog => 
+              TaskActivityLog.update(activityLog.id, { deletedAt: new Date() })
+            ));
           }
           return [];
         })
       ];
 
-      // Wait for all task-related data to be deleted
+      // Wait for all task-related data to be soft deleted
       await Promise.all(taskRelatedDeletePromises);
       
-      // Delete the task itself
-      return Task.delete(task.id);
+      // Soft delete the task itself
+      return Task.update(task.id, { deletedAt: new Date() });
     });
 
-    // Wait for all tasks to be deleted
+    // Wait for all tasks to be soft deleted
     await Promise.all(taskDeletePromises);
 
-    // Finally delete the project itself
-    const deleted = await Project.delete(projectId);
+    // Finally soft delete the project itself
+    const deleted = await Project.update(projectId, { 
+      deletedAt: new Date(),
+      updatedAt: new Date()
+    });
+    
     if (!deleted) {
       return res.status(404).json({ message: 'Project not found' });
     }

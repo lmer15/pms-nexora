@@ -32,6 +32,27 @@ class Project extends FirestoreService {
     }
   }
 
+  // Find projects by multiple facilities
+  async findByFacilities(facilityIds) {
+    try {
+      if (!facilityIds || facilityIds.length === 0) {
+        return [];
+      }
+
+      // For multiple facilities, we need to use 'in' operator
+      // Exclude archived projects by default
+      const projects = await this.query([
+        { field: 'facilityId', operator: 'in', value: facilityIds },
+        { field: 'archived', operator: '==', value: false }
+      ]);
+      
+      return projects;
+    } catch (error) {
+      console.error('Error finding projects by facilities:', error);
+      return [];
+    }
+  }
+
   // Find projects by assignee
   async findByAssignee(userId) {
     try {

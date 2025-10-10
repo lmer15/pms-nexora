@@ -95,7 +95,7 @@ const timeLogService = {
 
   // Start time tracking (create a running time log)
   startTimeTracking: async (taskId: string, description?: string): Promise<TimeLogEntry> => {
-    const response = await api.post(`/tasks/${taskId}/timeLogs/start`, {
+    const response = await api.post(`/timeLogs/start/${taskId}`, {
       description: description || 'Work session'
     });
     return response.data;
@@ -103,7 +103,7 @@ const timeLogService = {
 
   // Stop time tracking (update the running time log)
   stopTimeTracking: async (taskId: string, timeLogId: string): Promise<TimeLogEntry> => {
-    const response = await api.post(`/tasks/${taskId}/timeLogs/${timeLogId}/stop`);
+    const response = await api.post(`/timeLogs/stop/${taskId}/${timeLogId}`);
     return response.data;
   },
 

@@ -56,11 +56,36 @@ const checkTaskAccess = async (taskId, userId) => {
 
 exports.getTasks = async (req, res) => {
   try {
+    const userId = req.userId;
+    
     // Add pagination and limits to prevent excessive reads
     const { page = 1, limit = 50, status, priority, assignee } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     
-    const filters = [];
+    // Get user's facilities where they are owner or manager
+    const userFacilities = await UserFacility.findByUser(userId);
+    const authorizedFacilities = userFacilities.filter(uf => 
+      uf.role === 'owner' || uf.role === 'manager'
+    );
+    
+    if (authorizedFacilities.length === 0) {
+      return res.json([]); // User has no authorized facilities
+    }
+    
+    // Get all projects from authorized facilities
+    const facilityIds = authorizedFacilities.map(uf => uf.facilityId);
+    const projects = await Project.findByFacilities(facilityIds);
+    const projectIds = projects.map(p => p.id);
+    
+    if (projectIds.length === 0) {
+      return res.json([]); // No projects in authorized facilities
+    }
+    
+    // Build filters for tasks from authorized projects only
+    const filters = [
+      { field: 'projectId', operator: 'in', value: projectIds }
+    ];
+    
     if (status) filters.push({ field: 'status', operator: '==', value: status });
     if (priority) filters.push({ field: 'priority', operator: '==', value: priority });
     if (assignee) filters.push({ field: 'assigneeId', operator: '==', value: assignee });

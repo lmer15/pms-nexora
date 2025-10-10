@@ -19,49 +19,68 @@ import {
 interface MemberChartsProps {
   charts: MemberChartData;
   className?: string;
+  isDarkMode?: boolean;
 }
 
 const MemberCharts: React.FC<MemberChartsProps> = ({
   charts,
-  className = ''
+  className = '',
+  isDarkMode = false
 }) => {
   // Prepare task distribution data for pie chart
   const taskDistributionData = [
     {
-      name: 'Completed',
-      value: charts.taskDistribution.completed,
+      name: 'Done',
+      value: charts.taskDistribution.done,
       color: colors.success
     },
     {
-      name: 'Ongoing',
-      value: charts.taskDistribution.ongoing,
+      name: 'In-Progress',
+      value: charts.taskDistribution.inProgress,
+      color: colors.primary
+    },
+    {
+      name: 'Review',
+      value: charts.taskDistribution.review,
       color: colors.warning
     },
     {
       name: 'Pending',
       value: charts.taskDistribution.pending,
       color: colors.mutedText
+    },
+    {
+      name: 'Overdue',
+      value: charts.taskDistribution.overdue,
+      color: colors.danger
     }
   ].filter(item => item.value > 0);
 
-  const totalTasks = charts.taskDistribution.completed + charts.taskDistribution.ongoing + charts.taskDistribution.pending;
+  const totalTasks = charts.taskDistribution.done + charts.taskDistribution.inProgress + 
+                    charts.taskDistribution.review + charts.taskDistribution.pending + 
+                    charts.taskDistribution.overdue;
 
   const PieTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0];
       return (
         <div 
-          className="bg-white p-3 border rounded-lg shadow-lg"
-          style={{ borderColor: colors.border }}
+          className={`p-3 border rounded-lg shadow-lg ${
+            isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+          }`}
         >
-          <p className="font-medium">{data.name}</p>
-          <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Tasks:</span>{' '}
-            <span className="font-medium">{data.value}</span>
+          <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {data.name}
           </p>
           <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Percentage:</span>{' '}
-            <span className="font-medium">
+            <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Tasks:</span>{' '}
+            <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              {data.value}
+            </span>
+          </p>
+          <p className="text-sm">
+            <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Percentage:</span>{' '}
+            <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {totalTasks > 0 ? ((data.value / totalTasks) * 100).toFixed(1) : 0}%
             </span>
           </p>
@@ -75,13 +94,18 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
     if (active && payload && payload.length) {
       return (
         <div 
-          className="bg-white p-3 border rounded-lg shadow-lg"
-          style={{ borderColor: colors.border }}
+          className={`p-3 border rounded-lg shadow-lg ${
+            isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+          }`}
         >
-          <p className="font-medium">{new Date(label).toLocaleDateString()}</p>
+          <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {new Date(label).toLocaleDateString()}
+          </p>
           <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Utilization:</span>{' '}
-            <span className="font-medium">{payload[0].value.toFixed(1)}%</span>
+            <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Utilization:</span>{' '}
+            <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              {payload[0].value.toFixed(1)}%
+            </span>
           </p>
         </div>
       );
@@ -92,10 +116,11 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${className}`}>
       {/* Task Distribution Pie Chart */}
-      <Card className="p-6">
+      <Card className="p-6" isDarkMode={isDarkMode}>
         <SectionHeader
           label="TASK DISTRIBUTION"
           title="Work Breakdown"
+          isDarkMode={isDarkMode}
         />
         <div className="mt-6 h-80">
           {totalTasks > 0 ? (
@@ -106,7 +131,7 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: any) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -121,10 +146,10 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <svg className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 2L3 7v11a1 1 0 001 1h12a1 1 0 001-1V7l-7-5zM8 15V9h4v6H8z" clipRule="evenodd" />
                 </svg>
-                <p className="text-gray-500">No task data available</p>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No task data available</p>
               </div>
             </div>
           )}
@@ -139,7 +164,7 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-sm" style={{ color: colors.neutralText }}>
+                <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   {item.name} ({item.value})
                 </span>
               </div>
@@ -149,28 +174,29 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
       </Card>
 
       {/* Utilization Trend Line Chart */}
-      <Card className="p-6">
+      <Card className="p-6" isDarkMode={isDarkMode}>
         <SectionHeader
           label="UTILIZATION TREND"
           title="Daily Performance"
+          isDarkMode={isDarkMode}
         />
         <div className="mt-6 h-80">
           {charts.utilizationSeries.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={charts.utilizationSeries} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#374151' : '#E5E7EB'} />
                 <XAxis 
                   dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  stroke={colors.mutedText}
+                  tick={{ fontSize: 12, fill: isDarkMode ? '#9CA3AF' : '#6B7280' }}
+                  stroke={isDarkMode ? '#9CA3AF' : '#6B7280'}
                   tickFormatter={(value) => {
                     const date = new Date(value);
                     return `${date.getMonth() + 1}/${date.getDate()}`;
                   }}
                 />
                 <YAxis 
-                  tick={{ fontSize: 12 }}
-                  stroke={colors.mutedText}
+                  tick={{ fontSize: 12, fill: isDarkMode ? '#9CA3AF' : '#6B7280' }}
+                  stroke={isDarkMode ? '#9CA3AF' : '#6B7280'}
                   domain={[0, 100]}
                 />
                 <Tooltip content={<LineTooltip />} />
@@ -187,10 +213,10 @@ const MemberCharts: React.FC<MemberChartsProps> = ({
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <svg className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                <p className="text-gray-500">No utilization data available</p>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No utilization data available</p>
               </div>
             </div>
           )}

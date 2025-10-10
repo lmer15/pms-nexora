@@ -35,15 +35,14 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
       return colors[color];
     }
     
-    if (percentage >= 100) return colors.danger;
-    if (percentage >= 80) return colors.warning;
-    if (percentage >= 60) return colors.primary;
+    if (percentage >= 90) return colors.danger;
+    if (percentage >= 70) return colors.warning;
     return colors.success;
   };
 
   const getStatusColor = () => {
-    if (percentage >= 100) return colors.status.overloaded;
-    if (percentage >= 80) return colors.status.caution;
+    if (percentage >= 90) return colors.status.overloaded;
+    if (percentage >= 70) return colors.status.caution;
     return colors.status.balanced;
   };
 
@@ -62,7 +61,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
             <span 
               className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
             >
-              {Math.round(percentage)}%
+              {percentage.toFixed(1)}%
             </span>
           )}
         </div>
@@ -73,13 +72,13 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         aria-valuenow={value}
         aria-valuemin={0}
         aria-valuemax={max}
-        aria-label={label || `Progress: ${Math.round(percentage)}%`}
+        aria-label={label || `Progress: ${percentage.toFixed(1)}%`}
       >
         <div
           className="h-full transition-all duration-300 ease-out rounded-full"
           style={{
             width: `${percentage}%`,
-            background: color === 'auto' && percentage >= 80 
+            background: color === 'auto' && percentage >= 70 
               ? `linear-gradient(90deg, ${getStatusColor()} 0%, ${getStatusColor()}dd 100%)`
               : (color === 'auto' ? getStatusColor() : getColor())
           }}

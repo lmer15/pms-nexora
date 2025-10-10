@@ -62,7 +62,7 @@ const JoinFacility: React.FC = () => {
       setSuccess('Join request submitted successfully! You will be notified when an admin approves your request.');
       
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate('/resources/analytics/global');
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit join request');

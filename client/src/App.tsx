@@ -9,7 +9,6 @@ import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import JoinFacility from "./pages/JoinFacility";
-import FacilityDashboard from "./pages/Dashboard/FacilityDashboard";
 import Facilities from "./pages/Facilities";
 import FacilityView from "./pages/Facility/FacilityView";
 import TimeLog from "./pages/TimeLog";
@@ -50,20 +49,10 @@ function AppContent() {
       <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <Login />}
+        element={user ? <Navigate to="/resources/analytics/global" replace /> : <Login />}
       />
           <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
           <Route path="/join-facility/:linkId" element={<JoinFacility />} />
-      <Route
-        path="/dashboard"
-        element={
-          <PrivateRoute>
-            <DashboardLayout>
-              <FacilityDashboard />
-            </DashboardLayout>
-          </PrivateRoute>
-        }
-      />
       <Route
         path="/Facilities"
         element={

@@ -63,7 +63,7 @@ class AnalyticsController {
   async getMemberAnalytics(req, res) {
     try {
       const { memberId } = req.params;
-      const { range = '4w' } = req.query;
+      const { range = '4w', facilityId } = req.query;
       const userId = req.user.id;
       const userRole = req.user.role;
 
@@ -85,7 +85,8 @@ class AnalyticsController {
         memberId, 
         userId, 
         userRole, 
-        range
+        range,
+        facilityId
       );
       
       res.json(analytics);

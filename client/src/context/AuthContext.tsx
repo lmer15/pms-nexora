@@ -130,8 +130,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Store token in localStorage for API interceptor
       storage.setToken(response.token);
 
-      // Navigate to dashboard after successful authentication
-      navigate('/dashboard', { replace: true });
+      // Navigate to dashboard analytics after successful authentication
+      navigate('/resources/analytics/global', { replace: true });
     } catch (error) {
       console.error('Google login failed:', error);
       throw error;

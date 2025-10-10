@@ -22,7 +22,7 @@ export class ExportService {
     }
   }
 
-  async exportMemberAnalytics(memberId: number, range: TimeRange = '4w'): Promise<void> {
+  async exportMemberAnalytics(memberId: string, range: TimeRange = '4w'): Promise<void> {
     try {
       const exportResponse = await analyticsService.exportMemberAnalytics(memberId, range);
       await analyticsService.downloadExport(exportResponse.downloadUrl, exportResponse.filename);

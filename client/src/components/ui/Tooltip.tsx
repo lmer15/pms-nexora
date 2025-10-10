@@ -19,6 +19,7 @@ const Tooltip: React.FC<TooltipProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -26,7 +27,34 @@ const Tooltip: React.FC<TooltipProps> = ({
     if (disabled) return;
     
     const id = setTimeout(() => {
-      setIsVisible(true);
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        let top = 0;
+        let left = 0;
+        
+        switch (position) {
+          case 'top':
+            top = rect.top - 8;
+            left = rect.left + rect.width / 2;
+            break;
+          case 'bottom':
+            top = rect.bottom + 8;
+            left = rect.left + rect.width / 2;
+            break;
+          case 'left':
+            top = rect.top + rect.height / 2;
+            left = rect.left - 8;
+            break;
+          case 'right':
+          default:
+            top = rect.top + rect.height / 2;
+            left = rect.right + 8;
+            break;
+        }
+        
+        setTooltipPosition({ top, left });
+        setIsVisible(true);
+      }
     }, delay);
     setTimeoutId(id);
   };
@@ -47,40 +75,11 @@ const Tooltip: React.FC<TooltipProps> = ({
     };
   }, [timeoutId]);
 
-  const getPositionClasses = () => {
-    switch (position) {
-      case 'top':
-        return 'bottom-full left-1/2 transform -translate-x-1/2 mb-2';
-      case 'bottom':
-        return 'top-full left-1/2 transform -translate-x-1/2 mt-2';
-      case 'left':
-        return 'right-full top-1/2 transform -translate-y-1/2 mr-2';
-      case 'right':
-        return 'left-full top-1/2 transform -translate-y-1/2 ml-2';
-      default:
-        return 'left-full top-1/2 transform -translate-y-1/2 ml-2';
-    }
-  };
-
-  const getArrowClasses = () => {
-    switch (position) {
-      case 'top':
-        return 'top-full left-1/2 transform -translate-x-1/2 border-l-transparent border-r-transparent border-b-transparent border-t-gray-900 dark:border-t-gray-100';
-      case 'bottom':
-        return 'bottom-full left-1/2 transform -translate-x-1/2 border-l-transparent border-r-transparent border-t-transparent border-b-gray-900 dark:border-b-gray-100';
-      case 'left':
-        return 'left-full top-1/2 transform -translate-y-1/2 border-t-transparent border-b-transparent border-r-transparent border-l-gray-900 dark:border-l-gray-100';
-      case 'right':
-        return 'right-full top-1/2 transform -translate-y-1/2 border-t-transparent border-b-transparent border-l-transparent border-r-gray-900 dark:border-r-gray-100';
-      default:
-        return 'right-full top-1/2 transform -translate-y-1/2 border-t-transparent border-b-transparent border-l-transparent border-r-gray-900 dark:border-r-gray-100';
-    }
-  };
 
   return (
     <div
       ref={triggerRef}
-      className={`relative inline-block ${className}`}
+      className={`relative ${className ? 'block' : 'inline-block'} ${className}`}
       onMouseEnter={showTooltip}
       onMouseLeave={hideTooltip}
       onFocus={showTooltip}
@@ -91,12 +90,16 @@ const Tooltip: React.FC<TooltipProps> = ({
       {isVisible && (
         <div
           ref={tooltipRef}
-          className={`absolute z-[60] px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded shadow-lg whitespace-nowrap transition-opacity duration-200 ${getPositionClasses()}`}
+          className="fixed z-[9999] px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded shadow-lg whitespace-nowrap transition-opacity duration-200 pointer-events-none"
+          style={{
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            transform: position === 'top' || position === 'bottom' ? 'translateX(-50%)' : 
+                      position === 'left' ? 'translateX(-100%) translateY(-50%)' : 'translateY(-50%)'
+          }}
           role="tooltip"
         >
           {content}
-          {/* Arrow */}
-          <div className={`absolute w-0 h-0 border-4 ${getArrowClasses()}`} />
         </div>
       )}
     </div>

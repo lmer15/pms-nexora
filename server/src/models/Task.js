@@ -5,7 +5,7 @@ class Task extends FirestoreService {
     super('tasks');
   }
 
-  // Find tasks by project with caching
+  // Find tasks by project with caching (excludes soft-deleted tasks)
   async findByProject(projectId) {
     try {
       const cacheService = require('../services/cacheService');
@@ -18,10 +18,13 @@ class Task extends FirestoreService {
 
       const tasks = await this.findByField('projectId', projectId);
       
-      // Cache the results
-      cacheService.setProjectTasks(projectId, tasks);
+      // Filter out soft-deleted tasks
+      const activeTasks = tasks.filter(task => !task.deletedAt);
       
-      return tasks;
+      // Cache the results
+      cacheService.setProjectTasks(projectId, activeTasks);
+      
+      return activeTasks;
     } catch (error) {
       console.error('Error finding tasks by project:', error);
       return [];
@@ -104,7 +107,9 @@ class Task extends FirestoreService {
   // Find tasks by assignee
   async findByAssignee(userId) {
     try {
-      return await this.findByField('assigneeId', userId);
+      const tasks = await this.findByField('assigneeId', userId);
+      // Filter out soft-deleted tasks
+      return tasks.filter(task => !task.deletedAt);
     } catch (error) {
       console.error('Error finding tasks by assignee:', error);
       return [];
@@ -220,7 +225,7 @@ class Task extends FirestoreService {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
-  // Count tasks by multiple project IDs efficiently
+  // Count tasks by multiple project IDs efficiently (excludes soft-deleted tasks)
   async countByProjectIds(projectIds) {
     if (!projectIds || projectIds.length === 0) return 0;
     
@@ -239,7 +244,13 @@ class Task extends FirestoreService {
       
       let totalCount = 0;
       snapshots.forEach(snapshot => {
-        totalCount += snapshot.size;
+        // Filter out soft-deleted tasks
+        snapshot.docs.forEach(doc => {
+          const task = doc.data();
+          if (!task.deletedAt) {
+            totalCount++;
+          }
+        });
       });
       
       return totalCount;

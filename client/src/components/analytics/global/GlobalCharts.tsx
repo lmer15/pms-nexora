@@ -1,7 +1,7 @@
 import React from 'react';
 import Card from '../shared/Card';
 import SectionHeader from '../shared/SectionHeader';
-import { FacilitySummary, MemberSummary } from '../../../types/analytics';
+import { FacilitySummary } from '../../../types/analytics';
 import { colors } from '../../../styles/designTokens';
 import {
   BarChart,
@@ -18,26 +18,28 @@ import {
 
 interface GlobalChartsProps {
   facilities: FacilitySummary[];
-  members: MemberSummary[];
+  globalTaskCounts?: {
+    done: number;
+    inProgress: number;
+    review: number;
+    pending: number;
+    overdue: number;
+    total: number;
+  };
   className?: string;
   isDarkMode?: boolean;
 }
 
 const GlobalCharts: React.FC<GlobalChartsProps> = ({
   facilities,
-  members,
+  globalTaskCounts,
   className = '',
   isDarkMode = false
 }) => {
-  // Prepare facility data for bar chart (showing owned facilities)
-  const ownedFacilities = facilities.filter(facility => 
-    members.some(member => member.facilityId === facility.id && member.role === 'owner')
-  );
-  
-  const facilityBarData = ownedFacilities.map(facility => {
-    // Find the member data for this facility to get the correct utilization
-    const memberData = members.find(member => member.facilityId === facility.id && member.role === 'owner');
-    const utilization = memberData ? memberData.utilization : 0;
+  // Show all facilities in the bar chart (since we don't have member data to filter by ownership)
+  const facilityBarData = facilities.map(facility => {
+    // Use facility-level utilization (not individual member utilization)
+    const utilization = facility.avgUtilization;
     
     return {
       name: facility.name.length > 15 ? facility.name.substring(0, 15) + '...' : facility.name,
@@ -50,54 +52,39 @@ const GlobalCharts: React.FC<GlobalChartsProps> = ({
     };
   });
 
-  const hasMemberTaskData = members.length > 0 && members[0].tasks && 
-    (members[0].tasks.total > 0 || members[0].tasks.completed > 0 || members[0].tasks.ongoing > 0);
-  
-  let taskStatusCounts;
-  
-  if (hasMemberTaskData) {
-    // Use member task data
-    taskStatusCounts = members.reduce((acc, member) => {
-      acc.completed += member.tasks?.completed || 0;
-      acc.ongoing += member.tasks?.ongoing || 0;
-      acc.total += member.tasks?.total || 0;
-      return acc;
-    }, { completed: 0, ongoing: 0, total: 0 });
-  } else {
-    // Fallback: calculate from facility data
-    taskStatusCounts = facilities.reduce((acc, facility) => {
-      const totalTasks = facility.statusDistribution.balanced + 
-                        facility.statusDistribution.caution + 
-                        facility.statusDistribution.overloaded;
-      acc.completed += facility.statusDistribution.balanced;
-      acc.ongoing += facility.statusDistribution.caution;
-      acc.total += totalTasks;
-      return acc;
-    }, { completed: 0, ongoing: 0, total: 0 });
-  }
-
-  const pendingTasks = taskStatusCounts.total - taskStatusCounts.completed - taskStatusCounts.ongoing;
-
-  const taskStatusData = [
+  // Use global task counts if available, otherwise show no data
+  const taskStatusData = globalTaskCounts ? [
     {
-      name: 'Completed',
-      value: taskStatusCounts.completed,
+      name: 'Done',
+      value: globalTaskCounts.done,
       color: isDarkMode ? '#34D399' : '#10B981',
-      fullName: 'Completed Tasks'
+      fullName: 'Done Tasks'
     },
     {
-      name: 'In Progress',
-      value: taskStatusCounts.ongoing,
+      name: 'In-Progress',
+      value: globalTaskCounts.inProgress,
       color: isDarkMode ? '#60A5FA' : '#3B82F6',
-      fullName: 'In Progress Tasks'
+      fullName: 'In-Progress Tasks'
+    },
+    {
+      name: 'Review',
+      value: globalTaskCounts.review,
+      color: isDarkMode ? '#FBBF24' : '#F59E0B',
+      fullName: 'Review Tasks'
     },
     {
       name: 'Pending',
-      value: Math.max(0, pendingTasks),
-      color: isDarkMode ? '#FBBF24' : '#F59E0B',
+      value: globalTaskCounts.pending,
+      color: isDarkMode ? '#9CA3AF' : '#6B7280',
       fullName: 'Pending Tasks'
+    },
+    {
+      name: 'Overdue',
+      value: globalTaskCounts.overdue,
+      color: isDarkMode ? '#F87171' : '#EF4444',
+      fullName: 'Overdue Tasks'
     }
-  ].filter(item => item.value > 0);
+  ].filter(item => item.value > 0) : [];
 
   // If no data, show a placeholder
   const hasData = taskStatusData.length > 0;
@@ -133,7 +120,7 @@ const GlobalCharts: React.FC<GlobalChartsProps> = ({
   const PieTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0];
-      const totalTasks = taskStatusCounts.total;
+      const totalTasks = globalTaskCounts ? globalTaskCounts.total : 0;
       return (
         <div 
           className={`p-3 border rounded-lg shadow-lg ${
@@ -165,7 +152,7 @@ const GlobalCharts: React.FC<GlobalChartsProps> = ({
       <Card className="p-6" isDarkMode={isDarkMode}>
         <SectionHeader
           label="FACILITY PERFORMANCE"
-          title="Utilization by Owned Facilities"
+          title="Utilization by Accessible Facilities"
           isDarkMode={isDarkMode}
         />
         <div className="mt-6 h-80">
@@ -190,7 +177,6 @@ const GlobalCharts: React.FC<GlobalChartsProps> = ({
                 <Bar 
                   dataKey="utilization" 
                   radius={[4, 4, 0, 0]}
-                  fill={isDarkMode ? '#60A5FA' : '#3B82F6'}
                 >
                   {facilityBarData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />

@@ -25,13 +25,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   // Map routes to display names
   const getPageTitle = (pathname: string) => {
     const routeTitles: Record<string, string> = {
-      '/dashboard': 'Dashboard',
       '/Facilities': 'Facilities Management',
       '/time-log': 'Time Log',
       '/users': 'Users Management',
       '/menu-settings': 'Settings',
       '/notes': 'Notes',
-      '/meetings': 'Meetings'
+      '/meetings': 'Meetings',
+      '/resources/analytics/global': 'Dashboard Analytics'
     };
     
     // Handle dynamic facility route
@@ -39,7 +39,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       return 'Facility View';
     }
     
-    return routeTitles[pathname] || 'Dashboard';
+    return routeTitles[pathname] || 'Dashboard Analytics';
   };
 
   const toggleSidebar = () => {

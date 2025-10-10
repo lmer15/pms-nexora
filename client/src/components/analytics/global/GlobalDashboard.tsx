@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUserRole } from '../../../hooks/useUserRole';
+import { useAnalyticsDashboard } from '../../../hooks/useAnalyticsDashboard';
 import GlobalKpiStrip from './GlobalKpiStrip';
 import GlobalCharts from './GlobalCharts';
 import GlobalFacilitiesTable from './GlobalFacilitiesTable';
@@ -7,10 +9,9 @@ import GlobalInsights from './GlobalInsights';
 import FiltersBar from '../shared/FiltersBar';
 import ExportButton from '../shared/ExportButton';
 import LoadingSkeleton, { KPICardSkeleton, ChartSkeleton, TableSkeleton } from '../shared/LoadingSkeleton';
-import { GlobalAnalyticsResponse, TimeRange, Insight } from '../../../types/analytics';
+import { GlobalAnalyticsResponse, TimeRange } from '../../../types/analytics';
 import { analyticsService } from '../../../services/analyticsService';
 import { exportService } from '../../../services/exportService';
-import { InsightsEngine } from '../../../utils/insightsEngine';
 
 interface GlobalDashboardProps {
   className?: string;
@@ -20,61 +21,24 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
   className = ''
 }) => {
   const navigate = useNavigate();
-  const [data, setData] = useState<GlobalAnalyticsResponse | null>(null);
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange>('4w');
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark');
-    }
-    return false;
+  const {
+    data,
+    insights,
+    loading,
+    error,
+    timeRange,
+    isDarkMode,
+    fetchData,
+    handleTimeRangeChange
+  } = useAnalyticsDashboard<GlobalAnalyticsResponse>({
+    fetchFunction: (range: TimeRange) => analyticsService.getGlobalAnalytics(range, true)
   });
 
-  const fetchData = async (range: TimeRange) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Fetching global analytics with range:', range);
-      const response = await analyticsService.getGlobalAnalytics(range);
-      console.log('Analytics response:', response);
-      setData(response);
-      
-      // Generate insights using the insights engine
-      const generatedInsights = InsightsEngine.generateGlobalInsights(response);
-      setInsights(generatedInsights);
-    } catch (err) {
-      console.error('Failed to fetch global analytics:', err);
-      setError('Failed to load analytics data. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData(timeRange);
-  }, [timeRange]);
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  const handleTimeRangeChange = (range: TimeRange) => {
-    setTimeRange(range);
-  };
 
   const handleFacilityClick = (facilityId: number) => {
     navigate(`/resources/analytics/facility/${facilityId}`);
   };
+
 
   const handleExport = async () => {
     try {
@@ -85,9 +49,13 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
     }
   };
 
+  const getRoleBasedDescription = () => {
+    return "Comprehensive overview of all facilities, projects, and tasks across your organization";
+  };
+
   if (loading) {
     return (
-      <div className={`space-y-6 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} ${className}`}>
+      <div className={`space-y-6 p-6 ${className}`}>
         <div className="flex justify-between items-center">
           <div>
             <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Global Analytics</h1>
@@ -115,7 +83,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
 
   if (error) {
     return (
-      <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} ${className}`}>
+      <div className={`text-center py-12 p-6 ${className}`}>
         <div className="text-red-600 mb-4">
           <svg className="w-16 h-16 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -135,19 +103,21 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
 
   if (!data) {
     return (
-      <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} ${className}`}>
+      <div className={`text-center py-12 p-6 ${className}`}>
         <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No data available</p>
       </div>
     );
   }
 
   return (
-    <div className={`space-y-6 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} ${className}`}>
+    <div className={`space-y-6 p-6 ${className}`}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Global Analytics</h1>
-          <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Resource utilization and performance overview</p>
+          <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {getRoleBasedDescription()}
+          </p>
         </div>
         <div className="flex items-center space-x-4">
           <FiltersBar
@@ -160,19 +130,18 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
       </div>
 
       {/* KPI Strip */}
-      <GlobalKpiStrip kpis={data.kpis} isDarkMode={isDarkMode} />
+      <GlobalKpiStrip kpis={data.kpis} facilities={data.facilities} isDarkMode={isDarkMode} />
 
       {/* Charts */}
       <GlobalCharts
         facilities={data.facilities}
-        members={data.members}
+        globalTaskCounts={data.globalTaskCounts}
         isDarkMode={isDarkMode}
       />
 
       {/* Facilities Table */}
       <GlobalFacilitiesTable
         facilities={data.facilities}
-        members={data.members}
         onFacilityClick={handleFacilityClick}
         isDarkMode={isDarkMode}
       />

@@ -85,7 +85,7 @@ const Facilities: React.FC = () => {
 
   const handleViewDashboard = (facilityId: string) => {
     setCurrentFacilityById(facilityId);
-    navigate('/dashboard');
+    navigate('/resources/analytics/global');
   };
 
   const handleCreateFacility = async (facilityData: { name: string }) => {

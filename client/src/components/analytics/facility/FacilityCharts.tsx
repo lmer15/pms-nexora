@@ -19,11 +19,13 @@ import {
 interface FacilityChartsProps {
   charts: ChartData;
   className?: string;
+  isDarkMode?: boolean;
 }
 
 const FacilityCharts: React.FC<FacilityChartsProps> = ({
   charts,
-  className = ''
+  className = '',
+  isDarkMode = false
 }) => {
   // Prepare distribution data for pie chart
   const distributionData = [
@@ -51,16 +53,21 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
       const data = payload[0];
       return (
         <div 
-          className="bg-white p-3 border rounded-lg shadow-lg"
-          style={{ borderColor: colors.border }}
+          className={`p-3 border rounded-lg shadow-lg ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-600' 
+              : 'bg-white border-gray-200'
+          }`}
         >
-          <p className="font-medium">{data.name}</p>
-          <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Members:</span>{' '}
+          <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {data.name}
+          </p>
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span>Members:</span>{' '}
             <span className="font-medium">{data.value}</span>
           </p>
-          <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Percentage:</span>{' '}
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span>Percentage:</span>{' '}
             <span className="font-medium">
               {totalMembers > 0 ? ((data.value / totalMembers) * 100).toFixed(1) : 0}%
             </span>
@@ -75,12 +82,17 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
     if (active && payload && payload.length) {
       return (
         <div 
-          className="bg-white p-3 border rounded-lg shadow-lg"
-          style={{ borderColor: colors.border }}
+          className={`p-3 border rounded-lg shadow-lg ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-600' 
+              : 'bg-white border-gray-200'
+          }`}
         >
-          <p className="font-medium">Week of {label}</p>
-          <p className="text-sm">
-            <span style={{ color: colors.mutedText }}>Utilization:</span>{' '}
+          <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Week of {label}
+          </p>
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span>Utilization:</span>{' '}
             <span className="font-medium">{payload[0].value.toFixed(1)}%</span>
           </p>
         </div>
@@ -92,10 +104,11 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${className}`}>
       {/* Member Status Distribution Pie Chart */}
-      <Card className="p-6">
+      <Card className="p-6" isDarkMode={isDarkMode}>
         <SectionHeader
           label="MEMBER STATUS"
           title="Workload Distribution"
+          isDarkMode={isDarkMode}
         />
         <div className="mt-6 h-80">
           {totalMembers > 0 ? (
@@ -106,7 +119,7 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -121,10 +134,10 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <svg className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                <p className="text-gray-500">No member data available</p>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No member data available</p>
               </div>
             </div>
           )}
@@ -139,7 +152,7 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-sm" style={{ color: colors.neutralText }}>
+                <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   {item.name} ({item.value})
                 </span>
               </div>
@@ -149,48 +162,49 @@ const FacilityCharts: React.FC<FacilityChartsProps> = ({
       </Card>
 
       {/* Utilization Trend Line Chart */}
-      <Card className="p-6">
+      <Card className="p-6" isDarkMode={isDarkMode}>
         <SectionHeader
           label="UTILIZATION TREND"
           title="Weekly Performance"
+          isDarkMode={isDarkMode}
         />
         <div className="mt-6 h-80">
           {charts.utilizationSeries.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={charts.utilizationSeries} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#374151' : '#E5E7EB'} />
                 <XAxis 
                   dataKey="week" 
-                  tick={{ fontSize: 12 }}
-                  stroke={colors.mutedText}
+                  tick={{ fontSize: 12, fill: isDarkMode ? '#9CA3AF' : '#6B7280' }}
+                  stroke={isDarkMode ? '#9CA3AF' : '#6B7280'}
                   tickFormatter={(value) => {
                     const date = new Date(value);
                     return `${date.getMonth() + 1}/${date.getDate()}`;
                   }}
                 />
                 <YAxis 
-                  tick={{ fontSize: 12 }}
-                  stroke={colors.mutedText}
+                  tick={{ fontSize: 12, fill: isDarkMode ? '#9CA3AF' : '#6B7280' }}
+                  stroke={isDarkMode ? '#9CA3AF' : '#6B7280'}
                   domain={[0, 100]}
                 />
                 <Tooltip content={<LineTooltip />} />
                 <Line 
                   type="monotone" 
                   dataKey="utilization" 
-                  stroke={colors.primary}
+                  stroke="#10B981"
                   strokeWidth={3}
-                  dot={{ fill: colors.primary, strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6, stroke: colors.primary, strokeWidth: 2 }}
+                  dot={{ fill: "#10B981", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, stroke: "#10B981", strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <svg className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                <p className="text-gray-500">No utilization data available</p>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No utilization data available</p>
               </div>
             </div>
           )}

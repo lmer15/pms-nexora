@@ -23,6 +23,7 @@ export interface FacilitySummary {
   name: string;
   avgUtilization: number;
   membersCount: number;
+  userRole?: string;
   statusDistribution: {
     balanced: number;
     caution: number;
@@ -31,10 +32,10 @@ export interface FacilitySummary {
 }
 
 export interface MemberSummary {
-  id: number;
+  id: string;
   name: string;
   avatarUrl?: string;
-  facilityId: number;
+  facilityId: string;
   facilityName: string;
   role: string;
   tasks: {
@@ -52,12 +53,41 @@ export interface GlobalAnalyticsResponse {
   kpis: GlobalKPIs;
   facilities: FacilitySummary[];
   members: MemberSummary[];
+  globalTaskCounts?: {
+    done: number;
+    inProgress: number;
+    review: number;
+    pending: number;
+    overdue: number;
+    total: number;
+  };
+  insights?: string[];
+}
+
+export interface TaskInfo {
+  id: string;
+  name: string;
+  status: string;
+  dueDate: Date | null;
+}
+
+export interface DailyTaskData {
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  overdueTasks: number;
+  pendingTasks: number;
+  workload: number;
 }
 
 export interface FacilityKPIs {
   activeMembers: number;
   pendingTasks: number;
+  overdueTasks: number;
   avgUtilization: number;
+  pendingTasksList?: TaskInfo[];
+  overdueTasksList?: TaskInfo[];
+  dailyTaskData?: { [date: string]: DailyTaskData };
 }
 
 export interface ChartData {
@@ -82,6 +112,7 @@ export interface FacilityAnalyticsResponse {
   kpis: FacilityKPIs;
   charts: ChartData;
   members: MemberSummary[];
+  insights?: string[];
 }
 
 export interface MemberDetails {
@@ -103,9 +134,11 @@ export interface MemberKPIs {
 
 export interface MemberChartData {
   taskDistribution: {
-    completed: number;
-    ongoing: number;
+    done: number;
+    inProgress: number;
+    review: number;
     pending: number;
+    overdue: number;
   };
   utilizationSeries: Array<{
     date: string;
@@ -115,6 +148,7 @@ export interface MemberChartData {
 
 export interface TimelineItem {
   taskId: number;
+  name: string;
   project: string;
   start: string;
   end: string;
@@ -132,7 +166,7 @@ export interface MemberAnalyticsResponse {
 
 export interface Insight {
   id: string;
-  type: 'warning' | 'info' | 'success';
+  type: 'warning' | 'info' | 'success' | 'danger';
   message: string;
   action?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';

@@ -5,58 +5,49 @@ import {
   TimeRange,
   ExportResponse 
 } from '../types/analytics';
-import { API_BASE_URL as BASE_URL } from '../config/api';
-import { storage } from '../utils/storage';
-
-const API_BASE_URL = `${BASE_URL}/analytics`;
+import api from '../api/api';
 
 class AnalyticsService {
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = storage.getToken();
-    console.log('Request token available:', !!token);
-    
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-
-    console.log('Response status:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error Response:', errorText);
-      throw new Error(`Analytics API error: ${response.status} ${response.statusText}`);
+  private async request<T>(endpoint: string, options: any = {}): Promise<T> {
+    try {
+      const response = await api.get(`/analytics${endpoint}`, options);
+      return response.data;
+    } catch (error: any) {
+      console.error('Analytics API error:', error.response?.data || error.message);
+      throw new Error(`Analytics API error: ${error.response?.status || 'Unknown'} ${error.response?.statusText || error.message}`);
     }
-
-    return response.json();
   }
 
-  async getGlobalAnalytics(range: TimeRange = '4w'): Promise<GlobalAnalyticsResponse> {
-    return this.request<GlobalAnalyticsResponse>(`/global?range=${range}`);
+  async getGlobalAnalytics(range: TimeRange = '4w', forceRefresh: boolean = false): Promise<GlobalAnalyticsResponse> {
+    const params: any = { range };
+    if (forceRefresh) {
+      params._t = Date.now().toString();
+    }
+    return this.request<GlobalAnalyticsResponse>('/global', { params });
   }
 
   async getFacilityAnalytics(facilityId: string, range: TimeRange = '4w'): Promise<FacilityAnalyticsResponse> {
-    return this.request<FacilityAnalyticsResponse>(`/facility/${facilityId}?range=${range}`);
+    return this.request<FacilityAnalyticsResponse>(`/facility/${facilityId}`, { params: { range } });
   }
 
-  async getMemberAnalytics(memberId: number, range: TimeRange = '4w'): Promise<MemberAnalyticsResponse> {
-    return this.request<MemberAnalyticsResponse>(`/member/${memberId}?range=${range}`);
+  async getMemberAnalytics(memberId: string, range: TimeRange = '4w', facilityId?: string): Promise<MemberAnalyticsResponse> {
+    const params: any = { range };
+    if (facilityId) {
+      params.facilityId = facilityId;
+    }
+    return this.request<MemberAnalyticsResponse>(`/member/${memberId}`, { params });
   }
 
   async exportGlobalAnalytics(range: TimeRange = '4w'): Promise<ExportResponse> {
-    return this.request<ExportResponse>(`/export/global?range=${range}`);
+    return this.request<ExportResponse>('/export/global', { params: { range } });
   }
 
   async exportFacilityAnalytics(facilityId: string, range: TimeRange = '4w'): Promise<ExportResponse> {
-    return this.request<ExportResponse>(`/export/facility/${facilityId}?range=${range}`);
+    return this.request<ExportResponse>(`/export/facility/${facilityId}`, { params: { range } });
   }
 
-  async exportMemberAnalytics(memberId: number, range: TimeRange = '4w'): Promise<ExportResponse> {
-    return this.request<ExportResponse>(`/export/member/${memberId}?range=${range}`);
+  async exportMemberAnalytics(memberId: string, range: TimeRange = '4w'): Promise<ExportResponse> {
+    return this.request<ExportResponse>(`/export/member/${memberId}`, { params: { range } });
   }
 
   async downloadExport(downloadUrl: string, filename: string): Promise<void> {

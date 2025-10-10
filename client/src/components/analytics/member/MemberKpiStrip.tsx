@@ -7,11 +7,13 @@ import { colors } from '../../../styles/designTokens';
 interface MemberKpiStripProps {
   kpis: MemberKPIs;
   className?: string;
+  isDarkMode?: boolean;
 }
 
 const MemberKpiStrip: React.FC<MemberKpiStripProps> = ({
   kpis,
-  className = ''
+  className = '',
+  isDarkMode = false
 }) => {
   const kpiItems = [
     {
@@ -47,8 +49,8 @@ const MemberKpiStrip: React.FC<MemberKpiStripProps> = ({
     {
       label: 'Utilization',
       value: formatPercentage(kpis.utilization),
-      color: kpis.utilization >= 100 ? colors.danger : 
-             kpis.utilization >= 80 ? colors.warning : colors.success,
+      color: kpis.utilization >= 90 ? colors.danger : 
+             kpis.utilization >= 70 ? colors.warning : colors.success,
       icon: (
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -59,8 +61,8 @@ const MemberKpiStrip: React.FC<MemberKpiStripProps> = ({
       label: 'Trend',
       value: kpis.trend > 0 ? `+${formatDeltaPercentage(kpis.trend)}` : 
              kpis.trend < 0 ? formatDeltaPercentage(kpis.trend) : '—',
-      color: kpis.trend > 0 ? colors.danger : 
-             kpis.trend < 0 ? colors.success : colors.mutedText,
+      color: kpis.trend > 0 ? colors.success : 
+             kpis.trend < 0 ? colors.danger : colors.mutedText,
       icon: kpis.trend > 0 ? (
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -80,7 +82,7 @@ const MemberKpiStrip: React.FC<MemberKpiStripProps> = ({
   return (
     <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 ${className}`}>
       {kpiItems.map((item, index) => (
-        <Card key={index} className="p-6">
+        <Card key={index} className="p-6" isDarkMode={isDarkMode}>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div 
@@ -93,8 +95,9 @@ const MemberKpiStrip: React.FC<MemberKpiStripProps> = ({
               </div>
               <div>
                 <p 
-                  className="text-sm font-medium"
-                  style={{ color: colors.mutedText }}
+                  className={`text-sm font-medium ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}
                 >
                   {item.label}
                 </p>

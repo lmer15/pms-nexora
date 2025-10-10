@@ -174,6 +174,11 @@ const taskService = {
     return task;
   },
 
+  getAll: async (): Promise<Task[]> => {
+    const response = await api.get('/tasks');
+    return response.data;
+  },
+
   getByProject: async (projectId: string, options?: {
     page?: number;
     limit?: number;
