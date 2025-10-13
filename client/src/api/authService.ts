@@ -1,5 +1,17 @@
 import api from '../api/api';
 import { storage } from '../utils/storage';
+import { auth } from '../config/firebase';
+import axios from 'axios';
+
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// Helper function to get Firebase ID token
+const getFirebaseIdToken = async (): Promise<string> => {
+  if (!auth.currentUser) {
+    throw new Error('No authenticated user');
+  }
+  return await auth.currentUser.getIdToken();
+};
 
 export const authService = {
   async login(email: string, password: string) {
@@ -11,7 +23,7 @@ export const authService = {
   },
 
   async registerUser(idToken: string, firstName: string, lastName: string) {
-    const response = await api.post('/auth/firebase/register', {
+    const response = await api.post('/auth/register', {
       idToken,
       firstName,
       lastName
@@ -26,7 +38,7 @@ export const authService = {
   },
 
   async verifyToken(idToken: string) {
-    const response = await api.post('/auth/firebase/verify', { idToken });
+    const response = await api.post('/auth/verify', { idToken });
     storage.setToken(response.data.token);
     return response.data;
   },

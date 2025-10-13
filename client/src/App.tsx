@@ -5,14 +5,19 @@ import { CurrentFacilityProvider } from "./context/CurrentFacilityContext";
 import { FacilityProvider } from "./context/FacilityContext";
 import { FacilityRefreshProvider } from "./context/FacilityRefreshContext";
 import { FacilityProjectDataProvider } from "./context/FacilityProjectDataContext";
+import { SettingsProvider } from "./context/SettingsContext";
+import { ThemeProvider } from "./context/ThemeContext";
+import { NotesProvider } from "./context/NotesContext";
+import { ToastProvider, useToast } from "./context/ToastContext";
+import ToastContainer from "./components/ToastContainer";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
+import Register from "./pages/Auth/Register";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import JoinFacility from "./pages/JoinFacility";
 import Facilities from "./pages/Facilities";
 import FacilityView from "./pages/Facility/FacilityView";
 import TimeLog from "./pages/TimeLog";
-import Users from "./pages/Users";
 import MenuSettings from "./pages/MenuSettings";
 import Notes from "./pages/Notes";
 import Meetings from "./pages/Meetings";
@@ -23,17 +28,26 @@ import DashboardLayout from "./components/DashboardLayout";
 import PrivateRoute from "./routes/PrivateRoute";
 import LoadingAnimation from "./components/LoadingAnimation";
 
-export default function App() {
+function App() {
   return (
-    <CurrentFacilityProvider>
-      <FacilityProvider>
-        <FacilityRefreshProvider>
-          <FacilityProjectDataProvider>
-            <AppContent />
-          </FacilityProjectDataProvider>
-        </FacilityRefreshProvider>
-      </FacilityProvider>
-    </CurrentFacilityProvider>
+    <ThemeProvider>
+      <CurrentFacilityProvider>
+        <FacilityProvider>
+          <FacilityRefreshProvider>
+            <FacilityProjectDataProvider>
+              <SettingsProvider>
+                <NotesProvider>
+                  <ToastProvider>
+                    <AppContent />
+                    <ToastContainerWrapper />
+                  </ToastProvider>
+                </NotesProvider>
+              </SettingsProvider>
+            </FacilityProjectDataProvider>
+          </FacilityRefreshProvider>
+        </FacilityProvider>
+      </CurrentFacilityProvider>
+    </ThemeProvider>
   );
 }
 
@@ -50,6 +64,10 @@ function AppContent() {
       <Route
         path="/login"
         element={user ? <Navigate to="/resources/analytics/global" replace /> : <Login />}
+      />
+      <Route
+        path="/register"
+        element={user ? <Navigate to="/resources/analytics/global" replace /> : <Register />}
       />
           <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
           <Route path="/join-facility/:linkId" element={<JoinFacility />} />
@@ -79,16 +97,6 @@ function AppContent() {
           <PrivateRoute>
             <DashboardLayout>
               <TimeLog />
-            </DashboardLayout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/users"
-        element={
-          <PrivateRoute>
-            <DashboardLayout>
-              <Users />
             </DashboardLayout>
           </PrivateRoute>
         }
@@ -156,3 +164,10 @@ function AppContent() {
     </Routes>
   );
 }
+
+const ToastContainerWrapper = () => {
+  const { toasts, removeToast } = useToast();
+  return <ToastContainer toasts={toasts} onRemoveToast={removeToast} />;
+};
+
+export default App;

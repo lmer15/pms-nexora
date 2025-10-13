@@ -91,6 +91,21 @@ class User extends FirestoreService {
     await Promise.all(promises);
     return profiles;
   }
+
+  // Update authentication methods for a user
+  async updateAuthMethods(userId, authMethods) {
+    try {
+      const userRef = this.collection.doc(userId);
+      await userRef.update({
+        authMethods: authMethods,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return true;
+    } catch (error) {
+      console.error('Error updating auth methods:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new User();

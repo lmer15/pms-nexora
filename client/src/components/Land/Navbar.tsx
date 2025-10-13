@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 type Props = {
   darkMode: boolean;
@@ -71,7 +71,7 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
             className={`${btn} ${ghost}`}>
             Log In
           </a>
-          <a className={`${btn} ${solid}`} href="#cta">Get started</a>
+          <a className={`${btn} ${solid}`} href="/register">Get started</a>
         </div>
 
         {/* Mobile */}
@@ -91,9 +91,11 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
               ["Reviews", "#testimonials"],
               ["Contact", "#cta"],
             ].map(([label, href]) => (
-              <a key={href} href={href} onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2 ${activeHash === href ? 'bg-[#0e8407] text-white' : 'text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900'}`}>
-                {label}
-              </a>
+              <li key={href}>
+                <a href={href} onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2 block ${activeHash === href ? 'bg-[#0e8407] text-white' : 'text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900'}`}>
+                  {label}
+                </a>
+              </li>
             ))}
           </ul>
           <div className="px-4 pb-4 flex gap-3">
@@ -101,7 +103,7 @@ export default function Navbar({ darkMode, setDarkMode }: Props) {
               {darkMode ? "☀️ Light" : "🌙 Dark"}
             </button>
             <a className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-gray-800 dark:text-gray-300 dark:border-gray-700" href="#login">Login</a>
-            <a className="flex-1 rounded-lg bg-brand px-4 py-2 text-white" href="#cta">Get started</a>
+            <a className="flex-1 rounded-lg bg-brand px-4 py-2 text-white" href="/register">Get started</a>
           </div>
         </div>
       )}

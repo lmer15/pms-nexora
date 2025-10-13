@@ -4,7 +4,6 @@ import {
   LucideGrid,
   LucideClipboardList,
   LucideClock,
-  LucideUsers,
   LucideSettings,
   LucideHelpCircle,
   LucidePlus,
@@ -173,25 +172,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               </NavLink>
             </Tooltip>
 
-            <Tooltip content="Users" position="right" disabled={!isCollapsed}>
-              <NavLink
-                to="/users"
-                className={({ isActive }) =>
-                  `flex items-center px-2 py-1.5 rounded-md transition-all duration-200 ${
-                    isCollapsed ? 'justify-center' : 'justify-start'
-                  } ${
-                    isActive
-                      ? 'bg-brand text-white shadow-sm'
-                      : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-brand'
-                  }`
-                }
-              >
-                <LucideUsers className={`${isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
-                {!isCollapsed && <span className="ml-2 text-sm leading-none">Users</span>}
-              </NavLink>
-            </Tooltip>
 
             <Tooltip content="Settings" position="right" disabled={!isCollapsed}>
               <NavLink

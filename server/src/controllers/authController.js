@@ -237,9 +237,7 @@ exports.firebaseSync = async (req, res) => {
 
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.userId, {
-      attributes: { exclude: ['password'] }
-    });
+    const user = await User.getProfile(req.userId);
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -276,9 +274,244 @@ exports.getUserProfiles = async (req, res) => {
     res.json(profiles);
   } catch (error) {
     console.error('Get user profiles error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error fetching user profiles',
       error: error.message 
+    });
+  }
+};
+
+// Safe account type checking - READ ONLY operation
+exports.checkAccountType = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        exists: false,
+        authMethods: [],
+        canLink: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Check if user exists in our database
+    const user = await User.findByEmail(email);
+    
+    // Check Firebase auth providers for this user
+    let authMethods = [];
+    let firebaseUser = null;
+    
+    try {
+      // First try to get user by email from Firebase
+      firebaseUser = await admin.auth().getUserByEmail(email);
+      
+      // Check what providers are linked
+      if (firebaseUser.providerData) {
+        firebaseUser.providerData.forEach(provider => {
+          if (provider.providerId === 'google.com') {
+            authMethods.push('google');
+          } else if (provider.providerId === 'password') {
+            authMethods.push('email_password');
+          }
+        });
+      }
+    } catch (firebaseError) {
+      console.log('Firebase user check failed:', firebaseError.message);
+      
+      // If user not found in Firebase, check our database
+      if (firebaseError.code === 'auth/user-not-found') {
+        if (!user) {
+          return res.json({
+            exists: false,
+            authMethods: [],
+            canLink: false,
+            message: 'No account found with this email'
+          });
+        }
+        // If user exists in our database but not in Firebase, assume email/password
+        authMethods = ['email_password'];
+      } else {
+        // Other Firebase errors
+        authMethods = user ? ['email_password'] : [];
+      }
+    }
+    
+    // If no user found in either place
+    if (!user && !firebaseUser) {
+      return res.json({
+        exists: false,
+        authMethods: [],
+        canLink: false,
+        message: 'No account found with this email'
+      });
+    }
+
+    // Determine if linking is possible
+    const canLink = authMethods.length === 1; // Can link if only one method exists
+
+    res.json({
+      exists: true,
+      authMethods,
+      canLink,
+      message: `Account found with ${authMethods.join(' and ')} authentication`
+    });
+
+  } catch (error) {
+    console.error('Error checking account type:', error);
+    res.status(500).json({
+      exists: false,
+      authMethods: [],
+      canLink: false,
+      message: 'Error checking account type'
+    });
+  }
+};
+
+// Link email/password to existing Google account
+exports.linkEmailPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    const userId = req.user.id; // From auth middleware
+    const userEmail = req.user.email;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required'
+      });
+    }
+
+    // Get user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Link email/password to Firebase account
+    try {
+      const firebaseUser = await admin.auth().getUser(user.firebaseUid);
+      
+      // Check if user already has email/password provider
+      const hasEmailPassword = firebaseUser.providerData.some(provider => 
+        provider.providerId === 'password'
+      );
+      
+      if (hasEmailPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email/password is already linked to this account'
+        });
+      }
+
+      // Update Firebase user with password (this adds email/password provider)
+      await admin.auth().updateUser(user.firebaseUid, {
+        password: password
+      });
+
+      // Update user record to track auth methods
+      await User.updateAuthMethods(userId, ['google', 'email_password']);
+
+      res.json({
+        success: true,
+        message: 'Email/password successfully linked to your account',
+        authMethods: ['google', 'email_password']
+      });
+
+    } catch (firebaseError) {
+      console.error('Firebase linking error:', firebaseError);
+      
+      // Handle specific Firebase errors
+      if (firebaseError.code === 'auth/email-already-exists') {
+        res.status(400).json({
+          success: false,
+          message: 'This email is already associated with another account'
+        });
+      } else if (firebaseError.code === 'auth/weak-password') {
+        res.status(400).json({
+          success: false,
+          message: 'Password is too weak. Please choose a stronger password.'
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to link email/password. Please try again.'
+        });
+      }
+    }
+
+  } catch (error) {
+    console.error('Link email/password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during account linking'
+    });
+  }
+};
+
+// Link Google account to existing email/password account
+exports.linkGoogleAccount = async (req, res) => {
+  try {
+    const { googleIdToken } = req.body;
+    const userId = req.user.id; // From auth middleware
+
+    if (!googleIdToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google ID token is required'
+      });
+    }
+
+    // Verify Google ID token
+    const decodedToken = await admin.auth().verifyIdToken(googleIdToken);
+    const googleEmail = decodedToken.email;
+
+    // Get user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if email matches
+    if (user.email !== googleEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google account email does not match your account email'
+      });
+    }
+
+    // Link Google provider to Firebase account
+    try {
+      const firebaseUser = await admin.auth().getUser(user.firebaseUid);
+      
+      // Update user record to track auth methods
+      await User.updateAuthMethods(userId, ['email_password', 'google']);
+
+      res.json({
+        success: true,
+        message: 'Google account successfully linked to your account',
+        authMethods: ['email_password', 'google']
+      });
+
+    } catch (firebaseError) {
+      console.error('Firebase Google linking error:', firebaseError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to link Google account. Please try again.'
+      });
+    }
+
+  } catch (error) {
+    console.error('Link Google account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during Google account linking'
     });
   }
 };

@@ -8,8 +8,15 @@ class Note {
     this.content = data.content;
     this.facilityId = data.facilityId;
     this.userId = data.userId;
-    this.createdAt = data.createdAt;
-    this.updatedAt = data.updatedAt;
+    this.category = data.category || 'general';
+    this.tags = data.tags || [];
+    this.isPinned = data.isPinned || false;
+    this.isArchived = data.isArchived || false;
+    this.color = data.color || 'default';
+    
+    // Convert Firestore Timestamps to JavaScript Date objects
+    this.createdAt = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
+    this.updatedAt = data.updatedAt ? (data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)) : new Date();
   }
 
   // Create a new note
@@ -20,6 +27,11 @@ class Note {
         content: data.content,
         facilityId: data.facilityId,
         userId: data.userId,
+        category: data.category || 'general',
+        tags: data.tags || [],
+        isPinned: data.isPinned || false,
+        isArchived: data.isArchived || false,
+        color: data.color || 'default',
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -53,17 +65,24 @@ class Note {
   }
 
   // Find all notes for a facility
-  static async findByFacility(facilityId) {
+  static async findByFacility(facilityId, userId = null) {
     try {
-      const snapshot = await db.collection('notes')
-        .where('facilityId', '==', facilityId)
-        .orderBy('createdAt', 'desc')
-        .get();
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId);
 
-      return snapshot.docs.map(doc => new Note({
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+
+      // Sort by createdAt in memory to avoid Firestore index requirements
+      const notes = snapshot.docs.map(doc => new Note({
         id: doc.id,
         ...doc.data()
       }));
+
+      return notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } catch (error) {
       throw new Error(`Error finding notes by facility: ${error.message}`);
     }
@@ -74,13 +93,15 @@ class Note {
     try {
       const snapshot = await db.collection('notes')
         .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
         .get();
 
-      return snapshot.docs.map(doc => new Note({
+      // Sort by createdAt in memory
+      const notes = snapshot.docs.map(doc => new Note({
         id: doc.id,
         ...doc.data()
       }));
+
+      return notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } catch (error) {
       throw new Error(`Error finding notes by user: ${error.message}`);
     }
@@ -113,6 +134,160 @@ class Note {
     }
   }
 
+  // Search notes by title and content
+  static async search(facilityId, searchTerm, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('isArchived', '==', false);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const notes = snapshot.docs.map(doc => new Note({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Filter by search term (case-insensitive)
+      const searchLower = searchTerm.toLowerCase();
+      return notes.filter(note => 
+        note.title.toLowerCase().includes(searchLower) ||
+        note.content.toLowerCase().includes(searchLower) ||
+        note.tags.some(tag => tag.toLowerCase().includes(searchLower))
+      );
+    } catch (error) {
+      throw new Error(`Error searching notes: ${error.message}`);
+    }
+  }
+
+  // Get notes by category
+  static async findByCategory(facilityId, category, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('category', '==', category)
+        .where('isArchived', '==', false);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const notes = snapshot.docs.map(doc => new Note({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      return notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } catch (error) {
+      throw new Error(`Error finding notes by category: ${error.message}`);
+    }
+  }
+
+  // Get pinned notes
+  static async findPinned(facilityId, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('isPinned', '==', true)
+        .where('isArchived', '==', false);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const notes = snapshot.docs.map(doc => new Note({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      return notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } catch (error) {
+      throw new Error(`Error finding pinned notes: ${error.message}`);
+    }
+  }
+
+  // Get archived notes
+  static async findArchived(facilityId, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('isArchived', '==', true);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const notes = snapshot.docs.map(doc => new Note({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      return notes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    } catch (error) {
+      throw new Error(`Error finding archived notes: ${error.message}`);
+    }
+  }
+
+  // Get all categories for a facility
+  static async getCategories(facilityId, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('isArchived', '==', false);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const categories = new Set();
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.category) {
+          categories.add(data.category);
+        }
+      });
+
+      return Array.from(categories).sort();
+    } catch (error) {
+      throw new Error(`Error getting categories: ${error.message}`);
+    }
+  }
+
+  // Get all tags for a facility
+  static async getTags(facilityId, userId = null) {
+    try {
+      let query = db.collection('notes')
+        .where('facilityId', '==', facilityId)
+        .where('isArchived', '==', false);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const tags = new Set();
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.tags && Array.isArray(data.tags)) {
+          data.tags.forEach(tag => tags.add(tag));
+        }
+      });
+
+      return Array.from(tags).sort();
+    } catch (error) {
+      throw new Error(`Error getting tags: ${error.message}`);
+    }
+  }
+
   // Convert to plain object
   toObject() {
     return {
@@ -121,6 +296,11 @@ class Note {
       content: this.content,
       facilityId: this.facilityId,
       userId: this.userId,
+      category: this.category,
+      tags: this.tags,
+      isPinned: this.isPinned,
+      isArchived: this.isArchived,
+      color: this.color,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
     };

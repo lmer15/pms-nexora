@@ -13,7 +13,7 @@ import { Link } from "react-router-dom";
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <a
-            href="/login"
+            href="/register"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block px-6 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold shadow-md transition duration-300"

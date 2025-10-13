@@ -531,3 +531,154 @@ header {
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(75, 85, 99, 0.7);
 }
+
+/* Quill Editor Custom Styles */
+.ql-editor {
+  min-height: 200px;
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: transparent;
+  color: inherit;
+}
+
+.ql-toolbar {
+  border-top: 1px solid #e5e7eb;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: none;
+  background-color: transparent;
+  color: inherit;
+}
+
+.ql-container {
+  border-bottom: 1px solid #e5e7eb;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+  border-top: none;
+  background-color: transparent;
+  color: inherit;
+}
+
+/* Dark mode styles for Quill */
+.dark .ql-toolbar {
+  background-color: transparent;
+  border-color: #4b5563;
+  color: inherit;
+}
+
+.dark .ql-toolbar .ql-stroke {
+  stroke: currentColor;
+}
+
+.dark .ql-toolbar .ql-fill {
+  fill: currentColor;
+}
+
+.dark .ql-toolbar button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .ql-toolbar button.ql-active {
+  background-color: #0e8407;
+  color: white;
+}
+
+.dark .ql-container {
+  background-color: transparent;
+  border-color: #4b5563;
+  color: inherit;
+}
+
+.dark .ql-editor {
+  background-color: transparent;
+  color: inherit;
+}
+
+.dark .ql-editor.ql-blank::before {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Rich text editor wrapper to inherit colors */
+.rich-text-editor-wrapper .ql-editor {
+  color: inherit;
+}
+
+.rich-text-editor-wrapper .ql-editor.ql-blank::before {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.dark .rich-text-editor-wrapper .ql-editor.ql-blank::before {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Quill toolbar icon colors */
+.rich-text-editor-wrapper .ql-toolbar .ql-stroke {
+  stroke: currentColor;
+}
+
+.rich-text-editor-wrapper .ql-toolbar .ql-fill {
+  fill: currentColor;
+}
+
+.rich-text-editor-wrapper .ql-toolbar button {
+  color: inherit;
+}
+
+/* Quill editor text content */
+.rich-text-editor-wrapper .ql-editor h1,
+.rich-text-editor-wrapper .ql-editor h2,
+.rich-text-editor-wrapper .ql-editor h3,
+.rich-text-editor-wrapper .ql-editor h4,
+.rich-text-editor-wrapper .ql-editor h5,
+.rich-text-editor-wrapper .ql-editor h6 {
+  color: inherit;
+}
+
+.rich-text-editor-wrapper .ql-editor p,
+.rich-text-editor-wrapper .ql-editor div,
+.rich-text-editor-wrapper .ql-editor span {
+  color: inherit;
+}
+
+/* Prose styles for note content display */
+.prose {
+  color: inherit;
+}
+
+.prose p {
+  margin: 0.5em 0;
+}
+
+.prose ul, .prose ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.prose li {
+  margin: 0.25em 0;
+}
+
+.prose a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.dark .prose a {
+  color: #60a5fa;
+}
+
+.prose strong {
+  font-weight: 600;
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.prose u {
+  text-decoration: underline;
+}
+
+.prose s {
+  text-decoration: line-through;
+}

@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import { LucideBell, LucideUser, LucideSun, LucideMoon, LucideChevronRight, LucideBuilding } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrentFacility } from '../context/CurrentFacilityContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -14,20 +15,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentFacilityName } = useCurrentFacility();
+  const { isDarkMode, toggleTheme } = useTheme();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark');
-    }
-    return false;
-  });
 
   // Map routes to display names
   const getPageTitle = (pathname: string) => {
     const routeTitles: Record<string, string> = {
       '/Facilities': 'Facilities Management',
       '/time-log': 'Time Log',
-      '/users': 'Users Management',
       '/menu-settings': 'Settings',
       '/notes': 'Notes',
       '/meetings': 'Meetings',
@@ -45,23 +40,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
-
-  const toggleDarkMode = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('dark')) {
-      html.classList.remove('dark');
-      setIsDarkMode(false);
-    } else {
-      html.classList.add('dark');
-      setIsDarkMode(true);
-    }
-  };
-
-  useEffect(() => {
-    // Sync state with actual class on mount
-    const html = document.documentElement;
-    setIsDarkMode(html.classList.contains('dark'));
-  }, []);
 
   return (
     <div className={`h-screen overflow-hidden ${isDarkMode ? 'bg-neutral-dark' : 'bg-neutral-light'}`}>
@@ -110,7 +88,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           </button>
 
           <button
-            onClick={toggleDarkMode}
+            onClick={toggleTheme}
             aria-label="Toggle dark mode"
             className={`p-1.5 rounded-lg transition-colors ${
               isDarkMode

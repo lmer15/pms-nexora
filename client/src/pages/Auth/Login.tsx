@@ -1,7 +1,10 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../config/firebase';
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
+import AccountLinkingPrompt from '../../components/AccountLinkingPrompt';
+import { accountLinkingService } from '../../api/accountLinkingService';
 
 export default function Login() {
   const { login, googleLogin, sendVerificationEmail } = useAuth();
@@ -13,6 +16,11 @@ export default function Login() {
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+  
+  // Account linking state
+  const [showLinkingPrompt, setShowLinkingPrompt] = useState(false);
+  const [linkingEmail, setLinkingEmail] = useState('');
+  const [existingMethod, setExistingMethod] = useState<'google' | 'email_password'>('google');
 
   // Handle login
   const handleLogin = async (e: React.FormEvent) => {
@@ -22,10 +30,36 @@ export default function Login() {
 
     try {
       await login(loginEmail, loginPassword);
-      // Redirect will be handled by the auth context or router
     } catch (err: any) {
-      if (err.message === 'Account not found. Please sign up with Google.') {
-        setLoginError(err.message);
+      // Check if this might be a Google account that needs linking
+      if (err.code === 'auth/user-not-found' ||
+          err.code === 'auth/invalid-credential' ||
+          err.message === 'Account not found. Please sign up with Google.' ||
+          err.message === 'Invalid credentials provided.') {
+        
+        // First check if account is already linked
+        try {
+          const accountInfo = await accountLinkingService.checkAccountType(loginEmail);
+          
+          // Show linking prompt if account exists but is missing one method
+          if (accountInfo.exists && accountInfo.authMethods.length === 1) {
+            setLinkingEmail(loginEmail);
+            // Determine which method is missing
+            if (!accountInfo.authMethods.includes('email_password')) {
+              setExistingMethod('google'); // User has Google, needs email/password
+            } else {
+              setExistingMethod('email_password'); // User has email/password, needs Google
+            }
+            setShowLinkingPrompt(true);
+            setLoginError('');
+            return;
+          } else {
+            // Account is already linked or doesn't exist, show normal error
+            setLoginError(err.message);
+          }
+        } catch (checkError) {
+          setLoginError(err.message);
+        }
       } else {
         setLoginError(err.message);
       }
@@ -83,6 +117,116 @@ export default function Login() {
     }
   };
 
+  // Handle account linking
+  const handleLinkAccount = async (password: string) => {
+    try {
+      if (existingMethod === 'google') {
+        // Linking email/password to Google account
+        let currentUser = auth.currentUser;
+        let idToken = '';
+
+        if (currentUser && currentUser.email === loginEmail) {
+          // User is already signed in with the correct email
+          idToken = await currentUser.getIdToken();
+        } else {
+          // User needs to sign in with Google
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({
+            prompt: 'select_account'
+          });
+
+          const result = await signInWithPopup(auth, provider);
+          idToken = await result.user.getIdToken();
+
+          // Verify the Google account email matches the email they're trying to link
+          if (result.user.email !== loginEmail) {
+            throw new Error('Google account email does not match the email you entered');
+          }
+        }
+
+        // Use the password they already entered in the login form
+        const passwordToUse = password || loginPassword;
+
+        // Link the email/password to the Google account
+        const response = await accountLinkingService.linkEmailPassword(idToken, passwordToUse);
+        
+        if (response.success) {
+          setShowLinkingPrompt(false);
+          setLoginError('✅ Account linked successfully! You can now login with email/password.');
+          
+          setTimeout(() => {
+            if (auth.currentUser) {
+              window.location.href = '/resources/analytics/global';
+            } else {
+              setLoginError('✅ Account linked successfully! Please login with your email/password.');
+            }
+          }, 2000);
+        } else {
+          throw new Error(response.message || 'Failed to link account');
+        }
+      } else {
+        // Linking Google to email/password account
+        // First authenticate with email/password to get the account
+        const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        const idToken = await userCredential.user.getIdToken();
+
+        // Then authenticate with Google
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+          prompt: 'select_account'
+        });
+
+        const googleResult = await signInWithPopup(auth, provider);
+        const googleIdToken = await googleResult.user.getIdToken();
+
+        // Verify the Google account email matches
+        if (googleResult.user.email !== loginEmail) {
+          throw new Error('Google account email does not match the email you entered');
+        }
+
+        // Link Google to the email/password account
+        const response = await accountLinkingService.linkGoogleAccount(idToken, googleIdToken);
+        
+        if (response.success) {
+          setShowLinkingPrompt(false);
+          setLoginError('✅ Account linked successfully! You can now login with Google.');
+          
+          setTimeout(() => {
+            if (auth.currentUser) {
+              window.location.href = '/resources/analytics/global';
+            } else {
+              setLoginError('✅ Account linked successfully! Please login with your preferred method.');
+            }
+          }, 2000);
+        } else {
+          throw new Error(response.message || 'Failed to link account');
+        }
+      }
+    } catch (err: any) {
+      console.error('Account linking error:', err);
+      try {
+        await auth.signOut();
+      } catch (signOutError) {
+        // Silent error handling
+      }
+      throw new Error(err.message || 'Failed to link account');
+    }
+  };
+
+  // Handle using existing method
+  const handleUseExistingMethod = () => {
+    setShowLinkingPrompt(false);
+    if (existingMethod === 'google') {
+      handleGoogleLogin();
+    }
+  };
+
+  // Handle cancel linking
+  const handleCancelLinking = () => {
+    setShowLinkingPrompt(false);
+    setLinkingEmail('');
+  };
+
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       {/* Left Image */}
@@ -116,6 +260,7 @@ export default function Login() {
         {/* Right Side */}
         <div className="w-full md:w-1/2 p-10 flex flex-col justify-center z-10">
           <h2 className="text-3xl font-bold text-center mb-6">Log In</h2>
+          
 
           {loginError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -233,8 +378,29 @@ export default function Login() {
             />
             Continue with Google
           </button>
+
+          {/* Register Link */}
+          <div className="text-center">
+            <p className="text-gray-600">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-green-600 hover:underline">
+                Create one
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Account Linking Prompt */}
+      {showLinkingPrompt && (
+        <AccountLinkingPrompt
+          email={linkingEmail}
+          existingMethod={existingMethod}
+          onLinkAccount={handleLinkAccount}
+          onUseExistingMethod={handleUseExistingMethod}
+          onCancel={handleCancelLinking}
+        />
+      )}
     </div>
   );
 }

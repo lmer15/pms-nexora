@@ -61,10 +61,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           window.dispatchEvent(userProfileUpdatedEvent);
         } catch (error) {
           console.error('Failed to sync user with backend:', error);
-          // If sync fails, logout to prevent loop
-          await firebaseSignOut(auth);
-          setToken(null);
-          storage.removeToken();
+          // Continue with Firebase authentication despite sync failure
         }
       } else {
         setToken(null);
@@ -73,7 +70,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Listen for profile updates from other components
+    const handleUserProfileUpdate = (event: any) => {
+      const { user: updatedUser } = event.detail;
+      if (updatedUser && updatedUser.uid === auth.currentUser?.uid) {
+        setUser(updatedUser);
+      }
+    };
+
+    window.addEventListener('userProfileUpdated', handleUserProfileUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('userProfileUpdated', handleUserProfileUpdate);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
