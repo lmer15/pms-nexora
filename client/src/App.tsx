@@ -20,7 +20,6 @@ import FacilityView from "./pages/Facility/FacilityView";
 import TimeLog from "./pages/TimeLog";
 import MenuSettings from "./pages/MenuSettings";
 import Notes from "./pages/Notes";
-import Meetings from "./pages/Meetings";
 import GlobalAnalyticsPage from "./pages/analytics/global";
 import FacilityAnalyticsPage from "./pages/analytics/facility/[facilityId]";
 import MemberAnalyticsPage from "./pages/analytics/member/[memberId]";
@@ -59,8 +58,9 @@ function AppContent() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
+    <>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
         element={user ? <Navigate to="/resources/analytics/global" replace /> : <Login />}
@@ -122,16 +122,6 @@ function AppContent() {
         }
       />
       <Route
-        path="/meetings"
-        element={
-          <PrivateRoute>
-            <DashboardLayout>
-              <Meetings />
-            </DashboardLayout>
-          </PrivateRoute>
-        }
-      />
-      <Route
         path="/resources/analytics/global"
         element={
           <PrivateRoute>
@@ -161,7 +151,8 @@ function AppContent() {
           </PrivateRoute>
         }
       />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

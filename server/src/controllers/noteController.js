@@ -5,10 +5,7 @@ exports.getNotes = async (req, res) => {
     const facilityId = req.params.facilityId || req.query.facilityId;
     const userId = req.user.firebaseUid; // Use authenticated user
     
-    console.log('Getting notes for facilityId:', facilityId, 'userId:', userId);
-    
     const notes = await Note.findByFacility(facilityId, userId);
-    console.log('Found notes:', notes.length);
     
     res.json(notes);
   } catch (error) {

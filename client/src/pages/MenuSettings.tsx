@@ -13,6 +13,7 @@ import {
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import NotificationPreferences from '../components/NotificationPreferences';
 import { updateProfile as updateFirebaseProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { triggerAllUserProfilesRefresh } from '../utils/userProfileUtils';
@@ -574,148 +575,7 @@ const MenuSettings: React.FC = () => {
           )}
 
           {activeSection === 'notifications' && (
-            <div>
-              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4">Notification Settings</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Email Notifications</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Receive notifications via email</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.emailNotifications}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, emailNotifications: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Push Notifications</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Receive push notifications in browser</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.pushNotifications}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, pushNotifications: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Task Reminders</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Get reminded about upcoming tasks</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.taskReminders}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, taskReminders: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Project Updates</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Get notified about project changes</p>
-              </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.projectUpdates}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, projectUpdates: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Facility Invites</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Get notified about facility invitations</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.facilityInvites}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, facilityInvites: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-medium text-gray-900 dark:text-white">Weekly Digest</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Receive weekly summary emails</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={formData.notifications.weeklyDigest}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notifications: { ...prev.notifications, weeklyDigest: e.target.checked }
-                      }))}
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                  </label>
-                </div>
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <button 
-                    onClick={() => handleSave('notifications', formData.notifications)}
-                    disabled={saveStatus.notifications === 'saving'}
-                    className="bg-brand text-white px-3 py-2 text-xs rounded-md hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                  >
-                    {saveStatus.notifications === 'saving' ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                        <span>Saving...</span>
-                      </>
-                    ) : saveStatus.notifications === 'success' ? (
-                      <>
-                        <LucideCheck className="w-3 h-3" />
-                        <span>Saved!</span>
-                      </>
-                    ) : saveStatus.notifications === 'error' ? (
-                      <>
-                        <LucideAlertCircle className="w-3 h-3" />
-                        <span>Error</span>
-                      </>
-                    ) : (
-                      <>
-                        <LucideSave className="w-3 h-3" />
-                        <span>Save Changes</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <NotificationPreferences userId={user?.uid || ''} />
           )}
 
           {activeSection === 'security' && (

@@ -35,7 +35,6 @@ interface NoteEditorModalProps {
 
 const COMMON_CATEGORIES = [
   'general',
-  'meeting',
   'project',
   'idea',
   'todo',

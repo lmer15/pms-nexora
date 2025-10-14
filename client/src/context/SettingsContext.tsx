@@ -31,23 +31,23 @@ interface SettingsProviderProps {
 }
 
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { setTheme } = useTheme();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load settings when user is authenticated
+  // Load settings when user is authenticated and token is available
   useEffect(() => {
-    if (user) {
+    if (user && token) {
       loadSettings();
       loadUserProfile();
     } else {
       setSettings(null);
       setUserProfile(null);
     }
-  }, [user]);
+  }, [user, token]);
 
   // Listen for profile updates to refresh user profile data
   useEffect(() => {

@@ -9,6 +9,7 @@ const Project = require('../models/Project');
 const UserFacility = require('../models/UserFacility');
 const ActivityLoggerService = require('../services/activityLoggerService');
 const cacheService = require('../services/cacheService');
+const notificationService = require('../services/notificationService');
 
 // Helper function to check if user has access to a task
 const checkTaskAccess = async (taskId, userId) => {
@@ -23,8 +24,6 @@ const checkTaskAccess = async (taskId, userId) => {
       throw new Error('Project not found');
     }
 
-    // TEMPORARY: Use simple queries to avoid index requirements
-    // TODO: Replace with optimized query after UserFacility index is created
     try {
       const userFacility = await UserFacility.findByUserAndFacility(userId, project.facilityId);
       if (userFacility.length === 0) {
@@ -356,6 +355,27 @@ exports.createTask = async (req, res) => {
     // Log activity
     await ActivityLoggerService.logTaskCreated(task.id, creatorId, sanitizedTaskData.title);
 
+    // Send notifications for task assignment
+    if (task.assigneeIds && task.assigneeIds.length > 0) {
+      for (const assigneeId of task.assigneeIds) {
+        if (assigneeId !== creatorId) { // Don't notify the creator
+          try {
+            await notificationService.createTaskAssignedNotification(
+              task.id,
+              assigneeId,
+              creatorId,
+              task.title,
+              project.name,
+              project.facilityId
+            );
+          } catch (notificationError) {
+            console.error('Error sending task assignment notification:', notificationError);
+            // Don't fail the task creation if notification fails
+          }
+        }
+      }
+    }
+
     // Invalidate cache for project task counts and facility stats
     cacheService.invalidateProjectTasksCount(projectId);
     cacheService.invalidateFacilityStats(project.facilityId);
@@ -413,6 +433,97 @@ exports.updateTask = async (req, res) => {
 
     // Log activity
     await ActivityLoggerService.logTaskUpdated(req.params.id, req.userId, payload);
+
+    // Send notifications for task updates
+    try {
+      const project = await Project.findById(updatedTask.projectId);
+      if (project && updatedTask.assigneeIds && updatedTask.assigneeIds.length > 0) {
+        // Check if assignees were changed
+        const originalAssigneeIds = originalTask.assigneeIds || [];
+        const newAssigneeIds = updatedTask.assigneeIds || [];
+        const assigneesChanged = JSON.stringify(originalAssigneeIds.sort()) !== JSON.stringify(newAssigneeIds.sort());
+        
+        // Determine what type of update occurred
+        let updateType = 'updated';
+        let notificationType = 'task_updated';
+        
+        // Use the database user ID for notifications
+        const updaterUserId = req.user?.id || req.userId;
+        
+        if (assigneesChanged) {
+          // New assignees were added - send task_assigned notifications to new assignees only
+          const newAssignees = newAssigneeIds.filter(id => !originalAssigneeIds.includes(id));
+          const removedAssignees = originalAssigneeIds.filter(id => !newAssigneeIds.includes(id));
+          
+          // Send task_assigned notifications to new assignees
+          for (const assigneeId of newAssignees) {
+            if (assigneeId !== updaterUserId) {
+              try {
+                await notificationService.createTaskAssignedNotification(
+                  updatedTask.id,
+                  assigneeId,
+                  updaterUserId,
+                  updatedTask.title,
+                  project.name,
+                  project.facilityId
+                );
+              } catch (notificationError) {
+                console.error('Error sending task assignment notification:', notificationError);
+              }
+            }
+          }
+          
+          // Send task_updated notification to existing assignees about assignee changes
+          const existingAssignees = newAssigneeIds.filter(id => originalAssigneeIds.includes(id));
+          for (const assigneeId of existingAssignees) {
+            if (assigneeId !== updaterUserId) {
+              try {
+                await notificationService.createTaskUpdatedNotification(
+                  updatedTask.id,
+                  [assigneeId],
+                  updaterUserId,
+                  updatedTask.title,
+                  `assignees updated (${newAssignees.length} added, ${removedAssignees.length} removed)`,
+                  project.facilityId
+                );
+              } catch (notificationError) {
+                console.error('Error sending task update notification:', notificationError);
+              }
+            }
+          }
+        } else {
+          // No assignee changes - send regular update notifications
+          if (payload.status && payload.status !== originalTask.status) {
+            updateType = `status changed to ${payload.status}`;
+          } else if (payload.priority && payload.priority !== originalTask.priority) {
+            updateType = `priority changed to ${payload.priority}`;
+          } else if (payload.dueDate && payload.dueDate !== originalTask.dueDate) {
+            updateType = 'due date updated';
+          }
+
+          // Notify all assignees except the person who made the update
+          for (const assigneeId of updatedTask.assigneeIds) {
+            if (assigneeId !== updaterUserId) {
+              try {
+                await notificationService.createTaskUpdatedNotification(
+                  updatedTask.id,
+                  [assigneeId],
+                  updaterUserId,
+                  updatedTask.title,
+                  updateType,
+                  project.facilityId
+                );
+              } catch (notificationError) {
+                console.error('Error sending task update notification:', notificationError);
+              }
+            }
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error processing task update notifications:', notificationError);
+      // Don't fail the task update if notification processing fails
+    }
 
     // Convert Firestore Timestamp fields to ISO strings for client
     if (updatedTask.createdAt && typeof updatedTask.createdAt.toDate === 'function') {

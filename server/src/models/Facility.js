@@ -10,7 +10,7 @@ class Facility extends FirestoreService {
     return this.findByField('ownerId', ownerId);
   }
 
-  // Find facilities by member (using UserFacility relationships) with caching
+  // Find facilities by member (including owned facilities and UserFacility relationships) with caching
   async findByMember(userId) {
     try {
       const cacheService = require('../services/cacheService');
@@ -22,49 +22,72 @@ class Facility extends FirestoreService {
       }
 
       const UserFacility = require('./UserFacility');
+      const facilities = [];
+      const facilityIds = new Set(); // Use Set to avoid duplicates
       
-      // userId is now the database user ID from JWT token
-      const userFacilities = await UserFacility.findByUser(userId);
+      // 1. Find facilities where user is the owner
+      const ownedFacilities = await this.findByOwner(userId);
       
+      ownedFacilities.forEach(facility => {
+        facilities.push(facility);
+        facilityIds.add(facility.id);
+      });
+      
+      // 2. Find facilities where user is a member (through UserFacility relationships)
+      let userFacilities = await UserFacility.findByUser(userId);
+      
+      // If no relationships found with database user ID, try with Firebase UID
       if (userFacilities.length === 0) {
-        cacheService.setUserFacilities(userId, []);
-        return [];
+        // Get the user's Firebase UID from the User model
+        const User = require('./User');
+        const user = await User.findById(userId);
+        if (user && user.firebaseUid) {
+          userFacilities = await UserFacility.findByUser(user.firebaseUid);
+        }
       }
       
-      // Get all facility IDs for this user
-      const facilityIds = userFacilities.map(uf => uf.facilityId);
-      
-      // Use batch query for better performance - fetch all facilities at once
-      const facilities = [];
-      const batchSize = 10; // Firestore 'in' queries are limited to 10 items
-      
-      for (let i = 0; i < facilityIds.length; i += batchSize) {
-        const batch = facilityIds.slice(i, i + batchSize);
+      if (userFacilities.length > 0) {
+        // Get facility IDs that user is a member of (excluding already found owned facilities)
+        const memberFacilityIds = userFacilities
+          .map(uf => uf.facilityId)
+          .filter(id => !facilityIds.has(id));
         
-        try {
-          // Use Firestore 'in' query for batch fetching
-          const snapshot = await this.collection.where('__name__', 'in', batch.map(id => this.collection.doc(id))).get();
+        
+        // Use batch query for better performance - fetch all facilities at once
+        const batchSize = 10; // Firestore 'in' queries are limited to 10 items
+        
+        for (let i = 0; i < memberFacilityIds.length; i += batchSize) {
+          const batch = memberFacilityIds.slice(i, i + batchSize);
           
-          snapshot.forEach(doc => {
-            if (doc.exists) {
-              const facilityData = { id: doc.id, ...doc.data() };
-              facilities.push(facilityData);
-            }
-          });
-        } catch (batchError) {
-          // Fallback to individual lookups for this batch
-          for (const facilityId of batch) {
-            try {
-              const facility = await this.findById(facilityId);
-              if (facility) {
-                facilities.push(facility);
+          try {
+            // Use Firestore 'in' query for batch fetching
+            const snapshot = await this.collection.where('__name__', 'in', batch.map(id => this.collection.doc(id))).get();
+            
+            snapshot.forEach(doc => {
+              if (doc.exists) {
+                const facilityData = { id: doc.id, ...doc.data() };
+                facilities.push(facilityData);
+                facilityIds.add(facilityData.id);
               }
-            } catch (individualError) {
-              console.error(`Error fetching individual facility ${facilityId}:`, individualError);
+            });
+          } catch (batchError) {
+            console.error('Batch query error, falling back to individual lookups:', batchError);
+            // Fallback to individual lookups for this batch
+            for (const facilityId of batch) {
+              try {
+                const facility = await this.findById(facilityId);
+                if (facility) {
+                  facilities.push(facility);
+                  facilityIds.add(facility.id);
+                }
+              } catch (individualError) {
+                console.error(`Error fetching individual facility ${facilityId}:`, individualError);
+              }
             }
           }
         }
       }
+      
       
       // Cache the results
       cacheService.setUserFacilities(userId, facilities);

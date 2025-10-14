@@ -48,9 +48,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       setUser(user);
       if (user) {
-        const idToken = await user.getIdToken();
-        // Sync user with backend
         try {
+          const idToken = await user.getIdToken();
+          // Sync user with backend
           const response = await authService.syncUser(idToken);
           setToken(response.token);
           storage.setToken(response.token);
@@ -62,6 +62,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (error) {
           console.error('Failed to sync user with backend:', error);
           // Continue with Firebase authentication despite sync failure
+          setToken(null);
+          storage.removeToken();
         }
       } else {
         setToken(null);

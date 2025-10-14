@@ -87,7 +87,7 @@ export const FacilityProvider: React.FC<FacilityProviderProps> = ({ children }) 
       setFacilities([]);
       setCurrentFacility(null);
     }
-  }, [token, loadFacilities]);
+  }, [token]); // Removed loadFacilities from dependencies to prevent infinite loop
 
 
   const value = {

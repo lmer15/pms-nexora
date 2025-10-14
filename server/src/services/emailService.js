@@ -242,8 +242,130 @@ const sendFacilityInvitationToExistingUser = async (user, invitation, facility, 
   }
 };
 
+// Function to send notification email
+const sendEmailNotification = async (userEmail, notification) => {
+  // Skip if SMTP is not configured
+  if (!transporter) {
+    return;
+  }
+
+  try {
+    await transporter.verify();
+    
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const actionUrl = notification.actionUrl ? `${clientUrl}${notification.actionUrl}` : `${clientUrl}/dashboard`;
+    
+    // Get priority color
+    const getPriorityColor = (priority) => {
+      switch (priority) {
+        case 'urgent': return '#dc2626';
+        case 'high': return '#ea580c';
+        case 'normal': return '#10b981';
+        case 'low': return '#6b7280';
+        default: return '#10b981';
+      }
+    };
+
+    // Get category icon
+    const getCategoryIcon = (category) => {
+      switch (category) {
+        case 'task': return '📋';
+        case 'project': return '📁';
+        case 'facility': return '🏢';
+        case 'system': return '⚙️';
+        case 'communication': return '💬';
+        default: return '🔔';
+      }
+    };
+
+    const priorityColor = getPriorityColor(notification.priority);
+    const categoryIcon = getCategoryIcon(notification.category);
+    
+    const mailOptions = {
+      from: SMTP_FROM || SMTP_USER,
+      to: userEmail,
+      subject: `${categoryIcon} ${notification.title} - Nexora`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #10b981; margin-bottom: 10px;">Nexora</h1>
+            <h2 style="color: #374151; margin-top: 0;">Notification</h2>
+          </div>
+          
+          <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${priorityColor};">
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+              <span style="font-size: 24px; margin-right: 10px;">${categoryIcon}</span>
+              <h3 style="color: #374151; margin: 0; font-size: 18px;">${notification.title}</h3>
+            </div>
+            
+            <p style="color: #374151; font-size: 16px; line-height: 1.5; margin-bottom: 15px;">
+              ${notification.message}
+            </p>
+            
+            ${notification.data && Object.keys(notification.data).length > 0 ? `
+              <div style="background-color: #ffffff; padding: 15px; border-radius: 6px; margin-top: 15px; border: 1px solid #e5e7eb;">
+                <h4 style="color: #374151; margin: 0 0 10px 0; font-size: 14px; font-weight: bold;">Additional Details:</h4>
+                ${Object.entries(notification.data).map(([key, value]) => `
+                  <p style="color: #6b7280; margin: 5px 0; font-size: 14px;">
+                    <strong>${key}:</strong> ${value}
+                  </p>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+          
+          ${notification.actionUrl ? `
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${actionUrl}" 
+                 style="background-color: ${priorityColor}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                View Details
+              </a>
+            </div>
+          ` : ''}
+          
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+            <p style="color: #6b7280; margin: 0; font-size: 14px;">
+              <strong>Priority:</strong> ${notification.priority.charAt(0).toUpperCase() + notification.priority.slice(1)} | 
+              <strong>Category:</strong> ${notification.category.charAt(0).toUpperCase() + notification.category.slice(1)} | 
+              <strong>Time:</strong> ${new Date(notification.createdAt).toLocaleString()}
+            </p>
+          </div>
+          
+          <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 10px;">
+              You received this notification because you have email notifications enabled in your Nexora settings.
+            </p>
+            
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 10px;">
+              To manage your notification preferences, log into your Nexora account and go to Settings > Notifications.
+            </p>
+            
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              If you don't want to receive these emails, you can disable email notifications in your account settings.
+            </p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              Best regards,<br>
+              The Nexora Team
+            </p>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('Error sending notification email:', error);
+    throw new Error('Failed to send notification email');
+  }
+};
+
 module.exports = {
   sendWelcomeEmail,
   sendFacilityInvitationEmail,
-  sendFacilityInvitationToExistingUser
+  sendFacilityInvitationToExistingUser,
+  sendEmailNotification
 };

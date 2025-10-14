@@ -18,12 +18,9 @@ const firebaseAuthMiddleware = async (req, res, next) => {
     }
 
     // Find user in database
-    console.log('Looking for user with email:', email);
     const user = await User.findByEmail(email);
-    console.log('Found user:', user ? 'Yes' : 'No');
     
     if (!user) {
-      console.log('User not found in database for email:', email);
       return res.status(404).json({ message: 'User not found in database' });
     }
 
@@ -37,11 +34,8 @@ const firebaseAuthMiddleware = async (req, res, next) => {
       role: user.role || 'member'
     };
     
-    console.log('User info added to request:', {
-      id: req.user.id,
-      firebaseUid: req.user.firebaseUid,
-      email: req.user.email
-    });
+    // Also set req.userId for compatibility with other middleware
+    req.userId = user.id;
     
     next();
   } catch (error) {

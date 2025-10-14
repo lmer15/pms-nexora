@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const Project = require('../models/Project');
 const UserFacility = require('../models/UserFacility');
 const ActivityLoggerService = require('../services/activityLoggerService');
+const notificationService = require('../services/notificationService');
 
 // Helper function to check if user has access to a task
 const checkTaskAccess = async (taskId, userId) => {
@@ -112,6 +113,62 @@ exports.createComment = async (req, res) => {
 
     // Log activity
     await ActivityLoggerService.logCommentAdded(taskId, creatorId, comment.id);
+
+    // Send notifications for mentions in comments
+    try {
+      const { task, project } = await checkTaskAccess(taskId, creatorId);
+      const User = require('../models/User');
+      const user = await User.findById(creatorId);
+      const userProfile = user ? await User.getProfile(user.id) : null;
+      const commenterName = userProfile ? `${userProfile.firstName} ${userProfile.lastName}`.trim() : 'Someone';
+
+      // Check for @mentions in the comment content
+      const mentionRegex = /@(\w+)/g;
+      const mentions = content.match(mentionRegex);
+      
+      if (mentions && mentions.length > 0) {
+        // Get all users in the facility to match mentions
+        const facilityUsers = await UserFacility.findByFacility(project.facilityId);
+        
+        for (const mention of mentions) {
+          const mentionedUsername = mention.substring(1); // Remove @ symbol
+          
+          // Find user by username (assuming username is part of email or display name)
+          for (const facilityUser of facilityUsers) {
+            const mentionedUser = await User.findById(facilityUser.userId);
+            if (mentionedUser && mentionedUser.id !== creatorId) {
+              const mentionedUserProfile = await User.getProfile(mentionedUser.id);
+              const mentionedUserName = mentionedUserProfile ? 
+                `${mentionedUserProfile.firstName} ${mentionedUserProfile.lastName}`.trim() : 
+                mentionedUser.email;
+              
+              // Check if the mention matches the user's name or email
+              if (mentionedUserName.toLowerCase().includes(mentionedUsername.toLowerCase()) ||
+                  mentionedUser.email.toLowerCase().includes(mentionedUsername.toLowerCase())) {
+                
+                try {
+                  await notificationService.createCommentMentionNotification(
+                    comment.id,
+                    mentionedUser.id,
+                    commenterName,
+                    task.title,
+                    project.facilityId,
+                    taskId
+                  );
+                } catch (notificationError) {
+                  console.error('Error sending comment mention notification:', notificationError);
+                  // Don't fail the comment creation if notification fails
+                }
+                break; // Found the user, move to next mention
+              }
+            }
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error processing comment mention notifications:', notificationError);
+      // Don't fail the comment creation if notification processing fails
+    }
 
     // Fetch user profile for the created comment
     const User = require('../models/User');

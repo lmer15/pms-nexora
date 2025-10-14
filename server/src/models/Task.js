@@ -225,6 +225,28 @@ class Task extends FirestoreService {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
+  // Find tasks with due dates in a specific range (for deadline reminders)
+  async findTasksByDueDateRange(startDate, endDate) {
+    try {
+      const filters = [
+        { field: 'dueDate', operator: '>=', value: startDate.toISOString() },
+        { field: 'dueDate', operator: '<=', value: endDate.toISOString() }
+      ];
+      
+      const tasks = await this.query(filters);
+      
+      // Filter out soft-deleted tasks and tasks without assignees
+      return tasks.filter(task => 
+        !task.deletedAt && 
+        task.assigneeIds && 
+        task.assigneeIds.length > 0
+      );
+    } catch (error) {
+      console.error('Error finding tasks by due date range:', error);
+      return [];
+    }
+  }
+
   // Count tasks by multiple project IDs efficiently (excludes soft-deleted tasks)
   async countByProjectIds(projectIds) {
     if (!projectIds || projectIds.length === 0) return 0;

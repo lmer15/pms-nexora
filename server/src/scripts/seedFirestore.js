@@ -88,11 +88,11 @@ async function seedFirestore() {
     // Create sample notes
     console.log('Creating notes...');
     const note1 = await Note.createNote({
-      title: 'Meeting Notes - Sprint Planning',
+      title: 'Sprint Planning Notes',
       content: 'Discussed upcoming sprint goals and priorities. Key points: improve performance, add new features, fix bugs.',
       facilityId: facility1.id,
       createdBy: 'sample-user-1',
-      tags: ['meeting', 'sprint', 'planning']
+      tags: ['sprint', 'planning']
     });
     console.log('Created note:', note1.id);
 

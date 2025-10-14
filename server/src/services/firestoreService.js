@@ -8,13 +8,26 @@ class FirestoreService {
   // Create a new document
   async create(data) {
     try {
-      const docRef = await this.collection.add({
-        ...data,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      const doc = await docRef.get();
-      return { id: doc.id, ...doc.data() };
+      // If data has an id field, use it as the document ID
+      if (data.id) {
+        const docRef = this.collection.doc(data.id);
+        await docRef.set({
+          ...data,
+          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+          updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date()
+        });
+        const doc = await docRef.get();
+        return { id: doc.id, ...doc.data() };
+      } else {
+        // If no id field, let Firestore generate one
+        const docRef = await this.collection.add({
+          ...data,
+          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+          updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date()
+        });
+        const doc = await docRef.get();
+        return { id: doc.id, ...doc.data() };
+      }
     } catch (error) {
       if (error.code === 5) {
         throw new Error(`Firestore database not found. Please ensure Firestore is enabled in Firebase console for your project. Original error: ${error.message}`);

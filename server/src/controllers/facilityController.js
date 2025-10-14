@@ -18,7 +18,11 @@ const cacheService = require('../services/cacheService');
 
 exports.getFacilities = async (req, res) => {
   try {
-    const facilities = await Facility.findByMember(req.userId);
+    // Use the database user ID from req.user, not req.userId (which is Firebase UID)
+    const userId = req.user?.id || req.userId;
+    
+    
+    const facilities = await Facility.findByMember(userId);
     
     // Keep database user IDs for consistency with JWT tokens
     const facilitiesWithFirebaseUids = facilities;
@@ -100,10 +104,21 @@ exports.getFacilityById = async (req, res) => {
     }
     
     // Check if user is owner or member using UserFacility relationships
-    const userRelationship = await UserFacility.findByUserAndFacility(req.userId, req.params.id);
-    const isOwner = facility.ownerId === req.userId;
-    const isMember = userRelationship && userRelationship.length > 0;
+    const userId = req.user?.id || req.userId;
+    let userRelationship = await UserFacility.findByUserAndFacility(userId, req.params.id);
+    let isOwner = facility.ownerId === userId;
+    let isMember = userRelationship && userRelationship.length > 0;
     
+    // If no relationship found with database user ID, try with Firebase UID
+    if (!isMember && req.user?.firebaseUid) {
+      userRelationship = await UserFacility.findByUserAndFacility(req.user.firebaseUid, req.params.id);
+      isMember = userRelationship && userRelationship.length > 0;
+      
+      // Also check if owner is Firebase UID
+      if (!isOwner) {
+        isOwner = facility.ownerId === req.user.firebaseUid;
+      }
+    }
     
     if (!isOwner && !isMember) {
       return res.status(403).json({ message: 'Access denied to this facility' });
@@ -129,9 +144,21 @@ exports.getFacilityWithData = async (req, res) => {
     }
     
     // Check authorization
-    const userRelationship = await UserFacility.findByUserAndFacility(req.userId, id);
-    const isOwner = facility.ownerId === req.userId;
-    const isMember = userRelationship && userRelationship.length > 0;
+    const userId = req.user?.id || req.userId;
+    let userRelationship = await UserFacility.findByUserAndFacility(userId, id);
+    let isOwner = facility.ownerId === userId;
+    let isMember = userRelationship && userRelationship.length > 0;
+    
+    // If no relationship found with database user ID, try with Firebase UID
+    if (!isMember && req.user?.firebaseUid) {
+      userRelationship = await UserFacility.findByUserAndFacility(req.user.firebaseUid, id);
+      isMember = userRelationship && userRelationship.length > 0;
+      
+      // Also check if owner is Firebase UID
+      if (!isOwner) {
+        isOwner = facility.ownerId === req.user.firebaseUid;
+      }
+    }
     
     if (!isOwner && !isMember) {
       return res.status(403).json({ message: 'Access denied to this facility' });
@@ -252,7 +279,7 @@ exports.createFacility = async (req, res) => {
     const User = require('../models/User');
     
     // Use database user ID as ownerId for consistency with JWT tokens
-    const ownerId = req.userId;
+    const ownerId = req.user?.id || req.userId;
     console.log('createFacility: Using database user ID as ownerId:', ownerId);
     const facilityData = { ...req.body };
     delete facilityData.ownerId; // Remove ownerId from body, use authenticated user
@@ -783,7 +810,7 @@ exports.getFacilityMembers = async (req, res) => {
 exports.getUserRole = async (req, res) => {
   try {
     const { facilityId } = req.params;
-    const userId = req.userId;
+    const userId = req.user?.id || req.userId;
 
     // Get facility info
     const facility = await Facility.findById(facilityId);
@@ -791,8 +818,13 @@ exports.getUserRole = async (req, res) => {
       return res.status(404).json({ message: 'Facility not found' });
     }
 
-    // Check if user is the facility owner
-    if (facility.ownerId === userId) {
+    // Check if user is the facility owner (try both database user ID and Firebase UID)
+    let isOwner = facility.ownerId === userId;
+    if (!isOwner && req.user?.firebaseUid) {
+      isOwner = facility.ownerId === req.user.firebaseUid;
+    }
+
+    if (isOwner) {
       return res.json({
         role: 'owner',
         isOwner: true
@@ -800,7 +832,12 @@ exports.getUserRole = async (req, res) => {
     }
 
     // Check user's role in the facility
-    const relationships = await UserFacility.findByUserAndFacility(userId, facilityId);
+    let relationships = await UserFacility.findByUserAndFacility(userId, facilityId);
+    
+    // If no relationship found with database user ID, try with Firebase UID
+    if ((!relationships || relationships.length === 0) && req.user?.firebaseUid) {
+      relationships = await UserFacility.findByUserAndFacility(req.user.firebaseUid, facilityId);
+    }
     
     if (relationships && relationships.length > 0) {
       return res.json({
@@ -960,11 +997,9 @@ exports.removeMember = async (req, res) => {
     
     // If not found, try to find by Firebase UID by looking up the user first
     if (!targetRelation || targetRelation.length === 0) {
-      console.log('User not found by direct ID in removeMember, trying to find by Firebase UID...');
       const User = require('../models/User');
       const user = await User.findByFirebaseUid(targetUserId);
       if (user && user.id) {
-        console.log('Found user by Firebase UID in removeMember:', { firebaseUid: targetUserId, databaseId: user.id });
         actualTargetUserId = user.id;
         targetRelation = await UserFacility.findByUserAndFacility(actualTargetUserId, facilityId);
       }

@@ -41,7 +41,7 @@ interface NotesProviderProps {
 }
 
 export const NotesProvider: React.FC<NotesProviderProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   
   // State
   const [notes, setNotes] = useState<Note[]>([]);
@@ -58,14 +58,14 @@ export const NotesProvider: React.FC<NotesProviderProps> = ({ children }) => {
 
   // Load notes when user changes (independent of facility)
   useEffect(() => {
-    if (user) {
+    if (user && token) {
       loadNotes();
       loadPinnedNotes();
       loadArchivedNotes();
       loadCategories();
       loadTags();
     }
-  }, [user]);
+  }, [user, token]);
 
   const loadNotes = async () => {
     if (!user) return;
