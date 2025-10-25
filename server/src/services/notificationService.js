@@ -10,15 +10,18 @@ class NotificationService {
   // Create and send notification
   async createNotification(data) {
     try {
-      
       // Create notification in database
       const notification = await this.notificationModel.createNotification(data);
       
-      // Send real-time notification
-      await this.sendRealtimeNotification(notification);
+      // Send real-time notification (non-blocking)
+      this.sendRealtimeNotification(notification).catch(error => {
+        console.warn('Real-time notification failed (notification still saved):', error.message);
+      });
       
-      // Send email notification if enabled
-      await this.sendEmailNotificationIfEnabled(notification);
+      // Send email notification if enabled (non-blocking)
+      this.sendEmailNotificationIfEnabled(notification).catch(error => {
+        console.warn('Email notification failed (notification still saved):', error.message);
+      });
       
       return notification;
     } catch (error) {
@@ -30,6 +33,10 @@ class NotificationService {
   // Send real-time notification via Firebase Realtime Database
   async sendRealtimeNotification(notification) {
     try {
+      if (!realtimeDb) {
+        console.warn('Firebase Realtime Database not initialized, skipping real-time notification');
+        return;
+      }
       
       const notificationRef = realtimeDb.ref(`userNotifications/${notification.userId}/${notification.id}`);
       const notificationData = {
@@ -54,9 +61,8 @@ class NotificationService {
   async sendEmailNotificationIfEnabled(notification) {
     try {
       // Check user's notification preferences
-      const UserSettings = require('../models/UserSettings');
-      const userSettings = new UserSettings();
-      const settings = await userSettings.findByUserId(notification.userId);
+      const userSettings = require('../models/UserSettings');
+      const settings = await userSettings.getByUserId(notification.userId);
       
       if (!settings || !settings.notifications?.emailNotifications) {
         return; // User has disabled email notifications

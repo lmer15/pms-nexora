@@ -1,42 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
   LucideSettings,
-  LucideUser,
-  LucideBell,
-  LucideShield,
   LucidePalette,
   LucideGlobe,
+  LucideShield,
   LucideSave,
   LucideAlertCircle,
   LucideCheck,
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import NotificationPreferences from '../components/NotificationPreferences';
-import { updateProfile as updateFirebaseProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { auth } from '../config/firebase';
-import { triggerAllUserProfilesRefresh } from '../utils/userProfileUtils';
 
 const settingsSections = [
-  {
-    id: 'profile',
-    title: 'Profile Settings',
-    icon: <LucideUser className="w-4 h-4" />,
-    description: 'Manage your personal information and preferences',
-  },
-  {
-    id: 'notifications',
-    title: 'Notifications',
-    icon: <LucideBell className="w-4 h-4" />,
-    description: 'Configure notification preferences and alerts',
-  },
-  {
-    id: 'security',
-    title: 'Security & Privacy',
-    icon: <LucideShield className="w-4 h-4" />,
-    description: 'Manage security settings and privacy options',
-  },
   {
     id: 'appearance',
     title: 'Appearance',
@@ -70,42 +45,19 @@ const settingsSections = [
 ];
 
 const MenuSettings: React.FC = () => {
-  const { user } = useAuth();
   const { 
     settings, 
-    userProfile,
     loading, 
     error, 
-    updateProfile, 
     updateSection, 
-    toggleTwoFactor,
     resetSettings,
     exportUserData,
     deleteAccount
   } = useSettings();
   const { theme, isDarkMode, setTheme } = useTheme();
 
-  const [activeSection, setActiveSection] = useState('profile');
+  const [activeSection, setActiveSection] = useState('appearance');
   const [formData, setFormData] = useState({
-    profile: {
-      firstName: '',
-      lastName: '',
-      bio: '',
-      profilePicture: null as string | null
-    },
-    notifications: {
-      emailNotifications: true,
-      pushNotifications: true,
-      taskReminders: true,
-      projectUpdates: true,
-      facilityInvites: true,
-      weeklyDigest: false
-    },
-    security: {
-      twoFactorEnabled: false,
-      loginNotifications: true,
-      sessionTimeout: 30
-    },
     appearance: {
       theme: 'dark' as 'light' | 'dark' | 'auto',
       language: 'en-US',
@@ -125,11 +77,6 @@ const MenuSettings: React.FC = () => {
       allowDirectMessages: true
     }
   });
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
   const [saveStatus, setSaveStatus] = useState<{ [key: string]: 'idle' | 'saving' | 'success' | 'error' }>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -137,32 +84,12 @@ const MenuSettings: React.FC = () => {
   useEffect(() => {
     if (settings) {
       setFormData({
-        profile: {
-          ...settings.profile,
-          // Override with current user data if available
-          firstName: settings.profile.firstName || userProfile?.firstName || user?.displayName?.split(' ')[0] || '',
-          lastName: settings.profile.lastName || userProfile?.lastName || user?.displayName?.split(' ').slice(1).join(' ') || '',
-          profilePicture: settings.profile.profilePicture || userProfile?.profilePicture || user?.photoURL || null
-        },
-        notifications: settings.notifications,
-        security: settings.security,
         appearance: settings.appearance,
         system: settings.system,
         privacy: settings.privacy
       });
-    } else if (userProfile || user) {
-      // If no settings yet, initialize with user data
-      setFormData(prev => ({
-        ...prev,
-        profile: {
-          firstName: userProfile?.firstName || user?.displayName?.split(' ')[0] || '',
-          lastName: userProfile?.lastName || user?.displayName?.split(' ').slice(1).join(' ') || '',
-          bio: '',
-          profilePicture: userProfile?.profilePicture || user?.photoURL || null
-        }
-      }));
     }
-  }, [settings, userProfile, user]);
+  }, [settings]);
 
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -174,37 +101,7 @@ const MenuSettings: React.FC = () => {
     setSaveStatus(prev => ({ ...prev, [section]: 'saving' }));
     
     try {
-      if (section === 'profile') {
-        await updateProfile(data);
-        
-        // Update Firebase user's displayName if firstName or lastName changed
-        if (data.firstName || data.lastName) {
-          const currentUser = auth.currentUser;
-          if (currentUser) {
-            const newDisplayName = `${data.firstName || formData.profile.firstName} ${data.lastName || formData.profile.lastName}`.trim();
-            await updateFirebaseProfile(currentUser, {
-              displayName: newDisplayName
-            });
-            
-            // Trigger a custom event to notify other components
-            const userProfileUpdatedEvent = new CustomEvent('userProfileUpdated', {
-              detail: { 
-                userId: currentUser.uid, 
-                user: {
-                  ...currentUser,
-                  displayName: newDisplayName
-                }
-              }
-            });
-            window.dispatchEvent(userProfileUpdatedEvent);
-            
-            // Trigger refresh of all user profiles across the system
-            triggerAllUserProfilesRefresh();
-          }
-        }
-      } else {
-        await updateSection(section, data);
-      }
+      await updateSection(section, data);
       setSaveStatus(prev => ({ ...prev, [section]: 'success' }));
       showMessage('success', `${section} settings saved successfully`);
       setTimeout(() => {
@@ -219,85 +116,6 @@ const MenuSettings: React.FC = () => {
     }
   };
 
-  const handlePasswordChange = async () => {
-    // Validation
-    if (!passwordData.currentPassword) {
-      showMessage('error', 'Current password is required');
-      return;
-    }
-    
-    if (!passwordData.newPassword) {
-      showMessage('error', 'New password is required');
-      return;
-    }
-    
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showMessage('error', 'New passwords do not match');
-      return;
-    }
-    
-    if (passwordData.newPassword.length < 6) {
-      showMessage('error', 'New password must be at least 6 characters long');
-      return;
-    }
-
-    if (passwordData.currentPassword === passwordData.newPassword) {
-      showMessage('error', 'New password must be different from current password');
-      return;
-    }
-
-    setSaveStatus(prev => ({ ...prev, password: 'saving' }));
-    
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.email) {
-        throw new Error('No authenticated user found');
-      }
-
-      // Re-authenticate user with current password
-      const credential = EmailAuthProvider.credential(currentUser.email, passwordData.currentPassword);
-      await reauthenticateWithCredential(currentUser, credential);
-
-      // Update password
-      await updatePassword(currentUser, passwordData.newPassword);
-
-      // Clear form
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      
-      setSaveStatus(prev => ({ ...prev, password: 'success' }));
-      showMessage('success', 'Password changed successfully');
-      setTimeout(() => {
-        setSaveStatus(prev => ({ ...prev, password: 'idle' }));
-      }, 2000);
-    } catch (err: any) {
-      setSaveStatus(prev => ({ ...prev, password: 'error' }));
-      
-      // Handle specific Firebase errors
-      let errorMessage = 'Failed to change password';
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        errorMessage = 'The current password you entered is incorrect. Please check and try again.';
-      } else if (err.code === 'auth/weak-password') {
-        errorMessage = 'The new password is too weak. Please choose a stronger password with at least 6 characters.';
-      } else if (err.code === 'auth/requires-recent-login') {
-        errorMessage = 'For security reasons, please log out and log back in before changing your password.';
-      } else if (err.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many failed attempts. Please wait a few minutes before trying again.';
-      } else if (err.code === 'auth/user-not-found') {
-        errorMessage = 'User account not found. Please try logging in again.';
-      } else if (err.code === 'auth/network-request-failed') {
-        errorMessage = 'Network error. Please check your internet connection and try again.';
-      } else if (err.code === 'auth/operation-not-allowed') {
-        errorMessage = 'Password change is not allowed for this account type.';
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      showMessage('error', errorMessage);
-      setTimeout(() => {
-        setSaveStatus(prev => ({ ...prev, password: 'idle' }));
-      }, 3000);
-    }
-  };
 
   const handleThemeChange = async (newTheme: 'light' | 'dark' | 'auto') => {
     try {
@@ -434,358 +252,8 @@ const MenuSettings: React.FC = () => {
 
         {/* Settings Content */}
         <div className={`lg:col-span-3 p-4 rounded-md ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          {activeSection === 'profile' && (
-            <div>
-              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4">Profile Settings</h3>
-              
-              {/* Current User Info */}
-              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center space-x-3">
-                  {(() => {
-                    // Priority: userProfile.profilePicture -> user.photoURL -> default avatar
-                    const profilePicture = userProfile?.profilePicture || user?.photoURL;
-                    
-                    if (profilePicture) {
-                      return (
-                        <img
-                          src={profilePicture}
-                          alt="Profile"
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      );
-                    } else {
-                      return (
-                        <div className="w-10 h-10 bg-brand rounded-full flex items-center justify-center">
-                          <LucideUser className="w-5 h-5 text-white" />
-                        </div>
-                      );
-                    }
-                  })()}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {(() => {
-                        if (userProfile?.firstName && userProfile?.lastName) {
-                          return `${userProfile.firstName} ${userProfile.lastName}`;
-                        }
-                        if (user?.displayName) {
-                          return user.displayName;
-                        }
-                        return 'Current User';
-                      })()}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {user?.email || 'No email available'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.profile.firstName}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        profile: { ...prev.profile, firstName: e.target.value }
-                      }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      placeholder="Enter first name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.profile.lastName}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        profile: { ...prev.profile, lastName: e.target.value }
-                      }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      placeholder="Enter last name"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={user?.email || ''}
-                    disabled
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400"
-                    placeholder="Email address"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Email cannot be changed</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Bio
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={formData.profile.bio}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      profile: { ...prev.profile, bio: e.target.value }
-                    }))}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Tell us about yourself"
-                  />
-                </div>
-                <div className="pt-2 flex items-center space-x-2">
-                  <button 
-                    onClick={() => handleSave('profile', formData.profile)}
-                    disabled={saveStatus.profile === 'saving'}
-                    className="bg-brand text-white px-3 py-2 text-xs rounded-md hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                  >
-                    {saveStatus.profile === 'saving' ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                        <span>Saving...</span>
-                      </>
-                    ) : saveStatus.profile === 'success' ? (
-                      <>
-                        <LucideCheck className="w-3 h-3" />
-                        <span>Saved!</span>
-                      </>
-                    ) : saveStatus.profile === 'error' ? (
-                      <>
-                        <LucideAlertCircle className="w-3 h-3" />
-                        <span>Error</span>
-                      </>
-                    ) : (
-                      <>
-                        <LucideSave className="w-3 h-3" />
-                        <span>Save Changes</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {activeSection === 'notifications' && (
-            <NotificationPreferences userId={user?.uid || ''} />
-          )}
 
-          {activeSection === 'security' && (
-            <div>
-              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-4">Security & Privacy</h3>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-medium text-gray-900 dark:text-white mb-3">Change Password</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Current Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.currentPassword}
-                        onChange={(e) => {
-                          setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }));
-                          // Clear error state when user starts typing
-                          if (saveStatus.password === 'error') {
-                            setSaveStatus(prev => ({ ...prev, password: 'idle' }));
-                          }
-                        }}
-                        className={`w-full border rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
-                          saveStatus.password === 'error' 
-                            ? 'border-red-500 dark:border-red-500 focus:ring-red-500 focus:border-red-500' 
-                            : 'border-gray-300 dark:border-gray-600 focus:ring-brand focus:border-brand'
-                        }`}
-                        placeholder="Enter current password"
-                      />
-                      {saveStatus.password === 'error' && (
-                        <div className="mt-1 text-xs text-red-500 dark:text-red-400">
-                          💡 Make sure you're entering the correct current password
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        placeholder="Enter new password (min. 6 characters)"
-                      />
-                      {passwordData.newPassword && (
-                        <div className="mt-1">
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            Password strength: {
-                              passwordData.newPassword.length < 6 ? 'Too short' :
-                              passwordData.newPassword.length < 8 ? 'Weak' :
-                              passwordData.newPassword.length < 12 ? 'Medium' : 'Strong'
-                            }
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1 mt-1">
-                            <div 
-                              className={`h-1 rounded-full transition-all ${
-                                passwordData.newPassword.length < 6 ? 'w-1/4 bg-red-500' :
-                                passwordData.newPassword.length < 8 ? 'w-2/4 bg-yellow-500' :
-                                passwordData.newPassword.length < 12 ? 'w-3/4 bg-blue-500' : 'w-full bg-green-500'
-                              }`}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                        className={`w-full border rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
-                          passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword
-                            ? 'border-red-500 dark:border-red-500'
-                            : passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword
-                            ? 'border-green-500 dark:border-green-500'
-                            : 'border-gray-300 dark:border-gray-600'
-                        }`}
-                        placeholder="Confirm new password"
-                      />
-                      {passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
-                        <div className="mt-1 text-xs text-red-500">
-                          Passwords do not match
-                    </div>
-                      )}
-                      {passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && passwordData.newPassword && (
-                        <div className="mt-1 text-xs text-green-500">
-                          Passwords match
-                        </div>
-                      )}
-                    </div>
-                    <div className="pt-2">
-                      <button 
-                        onClick={handlePasswordChange}
-                        disabled={
-                          saveStatus.password === 'saving' || 
-                          !passwordData.currentPassword || 
-                          !passwordData.newPassword || 
-                          !passwordData.confirmPassword ||
-                          passwordData.newPassword !== passwordData.confirmPassword ||
-                          passwordData.newPassword.length < 6 ||
-                          passwordData.currentPassword === passwordData.newPassword
-                        }
-                        className="bg-brand text-white px-3 py-2 text-xs rounded-md hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                      >
-                        {saveStatus.password === 'saving' ? (
-                          <>
-                            <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                            <span>Changing...</span>
-                          </>
-                        ) : saveStatus.password === 'success' ? (
-                          <>
-                            <LucideCheck className="w-3 h-3" />
-                            <span>Changed!</span>
-                          </>
-                        ) : saveStatus.password === 'error' ? (
-                          <>
-                            <LucideAlertCircle className="w-3 h-3" />
-                            <span>Error</span>
-                          </>
-                        ) : (
-                          <>
-                            <LucideSave className="w-3 h-3" />
-                            <span>Change Password</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-medium text-gray-900 dark:text-white">Two-Factor Authentication</h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Add an extra layer of security to your account</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.security.twoFactorEnabled}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            security: { ...prev.security, twoFactorEnabled: e.target.checked }
-                          }));
-                          handleSave('security', { ...formData.security, twoFactorEnabled: e.target.checked });
-                        }}
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                    </label>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-medium text-gray-900 dark:text-white">Login Notifications</h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Get notified when someone logs into your account</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={formData.security.loginNotifications}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          security: { ...prev.security, loginNotifications: e.target.checked }
-                        }))}
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
-                    </label>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <button 
-                    onClick={() => handleSave('security', formData.security)}
-                    disabled={saveStatus.security === 'saving'}
-                    className="bg-brand text-white px-3 py-2 text-xs rounded-md hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                  >
-                    {saveStatus.security === 'saving' ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                        <span>Saving...</span>
-                      </>
-                    ) : saveStatus.security === 'success' ? (
-                      <>
-                        <LucideCheck className="w-3 h-3" />
-                        <span>Saved!</span>
-                      </>
-                    ) : saveStatus.security === 'error' ? (
-                      <>
-                        <LucideAlertCircle className="w-3 h-3" />
-                        <span>Error</span>
-                      </>
-                    ) : (
-                      <>
-                        <LucideSave className="w-3 h-3" />
-                        <span>Save Security Settings</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {activeSection === 'appearance' && (
             <div>

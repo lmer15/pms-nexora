@@ -7,6 +7,7 @@ interface UseAnalyticsDashboardOptions {
   fetchFunction: (range: TimeRange, ...args: any[]) => Promise<any>;
   fetchArgs?: any[];
   parseInsights?: (response: any) => Insight[];
+  refreshTriggers?: number[];
 }
 
 export const useAnalyticsDashboard = <T>(
@@ -101,7 +102,7 @@ export const useAnalyticsDashboard = <T>(
     } else {
       setLoading(false);
     }
-  }, [timeRange, token, ...(options.fetchArgs || [])]);
+  }, [timeRange, token, ...(options.fetchArgs || []), ...(options.refreshTriggers || [])]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {

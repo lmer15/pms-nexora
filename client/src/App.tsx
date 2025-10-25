@@ -13,6 +13,7 @@ import ToastContainer from "./components/ToastContainer";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
+import EmailVerification from "./pages/Auth/EmailVerification";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import JoinFacility from "./pages/JoinFacility";
 import Facilities from "./pages/Facilities";
@@ -20,6 +21,8 @@ import FacilityView from "./pages/Facility/FacilityView";
 import TimeLog from "./pages/TimeLog";
 import MenuSettings from "./pages/MenuSettings";
 import Notes from "./pages/Notes";
+import HelpSupport from "./pages/HelpSupport";
+import ProfileSettings from "./pages/ProfileSettings";
 import GlobalAnalyticsPage from "./pages/analytics/global";
 import FacilityAnalyticsPage from "./pages/analytics/facility/[facilityId]";
 import MemberAnalyticsPage from "./pages/analytics/member/[memberId]";
@@ -51,7 +54,7 @@ function App() {
 }
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, token, loading, needsPasswordSetup } = useAuth();
 
   if (loading) {
     return <LoadingAnimation />;
@@ -63,12 +66,13 @@ function AppContent() {
         <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
-        element={user ? <Navigate to="/resources/analytics/global" replace /> : <Login />}
+        element={user && token && !needsPasswordSetup ? <Navigate to="/resources/analytics/global" replace /> : <Login />}
       />
       <Route
         path="/register"
-        element={user ? <Navigate to="/resources/analytics/global" replace /> : <Register />}
+        element={user && token && !needsPasswordSetup ? <Navigate to="/resources/analytics/global" replace /> : <Register />}
       />
+      <Route path="/email-verification" element={<EmailVerification />} />
           <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
           <Route path="/join-facility/:linkId" element={<JoinFacility />} />
       <Route
@@ -150,6 +154,31 @@ function AppContent() {
             </DashboardLayout>
           </PrivateRoute>
         }
+      />
+      <Route
+        path="/help-support"
+        element={
+          <PrivateRoute>
+            <DashboardLayout>
+              <HelpSupport />
+            </DashboardLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/profile-settings"
+        element={
+          <PrivateRoute>
+            <DashboardLayout>
+              <ProfileSettings />
+            </DashboardLayout>
+          </PrivateRoute>
+        }
+      />
+      {/* Catch-all route for unknown paths */}
+      <Route 
+        path="*" 
+        element={<Navigate to="/resources/analytics/global" replace />} 
       />
       </Routes>
     </>

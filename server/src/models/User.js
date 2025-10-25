@@ -32,7 +32,7 @@ class User extends FirestoreService {
 
   // Update user profile
   async updateProfile(id, profileData) {
-    const allowedFields = ['firstName', 'lastName', 'profilePicture', 'isEmailVerified'];
+    const allowedFields = ['firstName', 'lastName', 'profilePicture', 'isEmailVerified', 'phoneNumber'];
     const updateData = {};
 
     Object.keys(profileData).forEach(key => {
@@ -41,7 +41,10 @@ class User extends FirestoreService {
       }
     });
 
-    return this.update(id, updateData);
+    console.log(`User.updateProfile called for user ${id} with updateData:`, updateData);
+    const result = await this.update(id, updateData);
+    console.log(`User.updateProfile result:`, result);
+    return result;
   }
 
   // Get user with sensitive data excluded
@@ -51,7 +54,18 @@ class User extends FirestoreService {
 
     // Exclude sensitive fields
     const { firebaseUid, ...profile } = user;
+    
+    // Convert relative profilePicture URL to full URL if needed
+    if (profile.profilePicture && profile.profilePicture.startsWith('/uploads/')) {
+      const baseUrl = process.env.API_BASE_URL || 'http://localhost:5000';
+      profile.profilePicture = `${baseUrl}${profile.profilePicture}`;
+    }
     return profile;
+  }
+
+  // Update user profile picture
+  async updateProfilePicture(id, profilePictureUrl) {
+    return this.update(id, { profilePicture: profilePictureUrl });
   }
 
   // Batch fetch user profiles by IDs
@@ -74,13 +88,21 @@ class User extends FirestoreService {
         const doc = await this.collection.doc(actualUserId).get();
         if (doc.exists) {
           const user = doc.data();
+          
+          // Convert relative profilePicture URL to full URL if needed
+          let profilePicture = user.profilePicture;
+          if (profilePicture && profilePicture.startsWith('/uploads/')) {
+            const baseUrl = process.env.API_BASE_URL || 'http://localhost:5000';
+            profilePicture = `${baseUrl}${profilePicture}`;
+          }
+          
           profiles[actualUserId] = {
             id: actualUserId,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
             displayName: user.displayName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-            profilePicture: user.profilePicture
+            profilePicture: profilePicture
           };
         }
       } catch (error) {

@@ -11,6 +11,7 @@ export interface UserSettings {
     lastName: string;
     bio: string;
     profilePicture: string | null;
+    phoneNumber: string | null;
   };
   notifications: {
     emailNotifications: boolean;

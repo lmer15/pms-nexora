@@ -412,6 +412,37 @@ const FacilityView: React.FC = () => {
     fetchFacilityMembers();
   }, [facility?.id, memberRefreshTriggers[facility?.id || '']]);
 
+  // Listen for user profile updates to refresh facility members
+  useEffect(() => {
+    const handleUserProfileUpdate = (event: any) => {
+      const { userId } = event.detail;
+      if (userId === user?.uid && facility?.id) {
+        // Refresh facility members when current user's profile is updated
+        const fetchFacilityMembers = async () => {
+          try {
+            const membersData = await facilityService.getFacilityMembers(facility.id);
+            const assignees = membersData.map(member => ({
+              id: member.id,
+              name: member.name,
+              email: member.email,
+              profilePicture: member.profilePicture
+            }));
+            setAvailableAssignees(assignees);
+          } catch (error) {
+            console.error('Failed to refresh facility members after profile update:', error);
+          }
+        };
+        fetchFacilityMembers();
+      }
+    };
+
+    window.addEventListener('userProfileUpdated', handleUserProfileUpdate);
+
+    return () => {
+      window.removeEventListener('userProfileUpdated', handleUserProfileUpdate);
+    };
+  }, [user?.uid, facility?.id]);
+
 
   // Collect available tags from all tasks
   useEffect(() => {

@@ -338,6 +338,11 @@ class PDFGenerator {
     const insights = insightsEngine.generateMemberInsights(data);
     const timeRange = formatTimeRange(range);
     
+    // Get facility information
+    const facility = data.member.facilityId ? await this.getFacilityInfo(data.member.facilityId) : null;
+    const projectCount = facility ? facility.projects : 0;
+    const facilityName = facility ? facility.name : 'Unknown Facility';
+    
     return `
       <!DOCTYPE html>
       <html>
@@ -358,10 +363,20 @@ class PDFGenerator {
 
           <div class="section">
             <h2>Member Overview</h2>
-            <p><strong>Name:</strong> ${data.member.name}</p>
-            <p><strong>Role:</strong> ${data.member.role}</p>
-            <p><strong>Capacity:</strong> ${data.member.capacity} hours/week</p>
-            <p><strong>Current Utilization:</strong> ${data.kpis.utilization.toFixed(1)}%</p>
+            <div class="member-info-grid">
+              <div class="info-card">
+                <h3>Personal Information</h3>
+                <p><strong>Name:</strong> ${data.member.name}</p>
+                <p><strong>Role:</strong> ${data.member.role}</p>
+                <p><strong>Capacity:</strong> ${data.member.capacity} hours/week</p>
+              </div>
+              <div class="info-card">
+                <h3>Facility Information</h3>
+                <p><strong>Facility:</strong> ${facilityName}</p>
+                <p><strong>Projects in Facility:</strong> ${projectCount}</p>
+                <p><strong>Current Utilization:</strong> ${data.kpis.utilization.toFixed(1)}%</p>
+              </div>
+            </div>
           </div>
 
           <div class="section">
@@ -382,6 +397,30 @@ class PDFGenerator {
               <div class="kpi-card">
                 <h3>Utilization</h3>
                 <div class="kpi-value">${data.kpis.utilization.toFixed(1)}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Task Breakdown</h2>
+            <div class="task-summary">
+              <div class="task-stats">
+                <div class="stat-item">
+                  <span class="stat-label">Total Tasks:</span>
+                  <span class="stat-value">${data.kpis.totalTasks}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Completed:</span>
+                  <span class="stat-value">${data.kpis.completed}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">In Progress:</span>
+                  <span class="stat-value">${data.kpis.ongoing}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Pending:</span>
+                  <span class="stat-value">${data.kpis.totalTasks - data.kpis.completed - data.kpis.ongoing}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -467,14 +506,14 @@ class PDFGenerator {
       .header {
         text-align: center;
         margin-bottom: 30px;
-        border-bottom: 2px solid #1E40AF;
+        border-bottom: 2px solid #10B981;
         padding-bottom: 20px;
       }
 
       .header h1 {
         font-size: 24px;
         font-weight: 700;
-        color: #1E40AF;
+        color: #10B981;
         margin-bottom: 5px;
       }
 
@@ -496,7 +535,7 @@ class PDFGenerator {
       .section h2 {
         font-size: 16px;
         font-weight: 600;
-        color: #1E40AF;
+        color: #10B981;
         margin-bottom: 15px;
         border-bottom: 1px solid #E5E7EB;
         padding-bottom: 5px;
@@ -507,6 +546,76 @@ class PDFGenerator {
         grid-template-columns: repeat(4, 1fr);
         gap: 15px;
         margin-bottom: 20px;
+      }
+
+      .member-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .info-card {
+        background: #F8FAFC;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 15px;
+      }
+
+      .info-card h3 {
+        font-size: 12px;
+        font-weight: 600;
+        color: #10B981;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #E5E7EB;
+        padding-bottom: 5px;
+      }
+
+      .info-card p {
+        font-size: 11px;
+        margin-bottom: 5px;
+        color: #374151;
+      }
+
+      .task-summary {
+        background: #F8FAFC;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+
+      .task-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+      }
+
+      .stat-item {
+        text-align: center;
+        padding: 10px;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #E5E7EB;
+      }
+
+      .stat-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 500;
+        color: #6B7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+      }
+
+      .stat-value {
+        display: block;
+        font-size: 18px;
+        font-weight: 700;
+        color: #10B981;
       }
 
       .kpi-card {
@@ -529,7 +638,7 @@ class PDFGenerator {
       .kpi-value {
         font-size: 20px;
         font-weight: 700;
-        color: #1E40AF;
+        color: #10B981;
       }
 
       .data-table {
@@ -582,6 +691,21 @@ class PDFGenerator {
         color: #991B1B;
       }
 
+      .status.completed {
+        background: #D1FAE5;
+        color: #065F46;
+      }
+
+      .status.ongoing {
+        background: #FEF3C7;
+        color: #92400E;
+      }
+
+      .status.pending {
+        background: #F3F4F6;
+        color: #6B7280;
+      }
+
       .insights {
         margin-top: 15px;
       }
@@ -606,8 +730,8 @@ class PDFGenerator {
       }
 
       .insight.info {
-        background: #EFF6FF;
-        border-left-color: #3B82F6;
+        background: #F0FDF4;
+        border-left-color: #10B981;
       }
 
       .insight.success {
@@ -658,14 +782,58 @@ class PDFGenerator {
   }
 
   async htmlToPDF(html, outputPath) {
-    // Simplified PDF generation - just save as HTML for now
-    // In production, you would use Puppeteer or another PDF library
+    let browser;
     try {
-      await fs.writeFile(outputPath.replace('.pdf', '.html'), html);
-      console.log(`PDF generation simplified - saved as HTML: ${outputPath.replace('.pdf', '.html')}`);
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '20mm',
+          bottom: '20mm',
+          left: '20mm'
+        }
+      });
+      
+      await fs.writeFile(outputPath, pdfBuffer);
+      console.log(`PDF generated successfully: ${outputPath}`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       throw error;
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  }
+
+  async getFacilityInfo(facilityId) {
+    try {
+      const Facility = require('../models/Facility');
+      const Project = require('../models/Project');
+      
+      const facility = await Facility.findById(facilityId);
+      if (!facility) return null;
+      
+      const projects = await Project.findByFacility(facilityId);
+      const activeProjects = projects.filter(p => !p.deletedAt);
+      
+      return {
+        id: facility.id,
+        name: facility.name,
+        projects: activeProjects.length
+      };
+    } catch (error) {
+      console.error('Error getting facility info:', error);
+      return null;
     }
   }
 

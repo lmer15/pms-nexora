@@ -16,6 +16,7 @@ interface SettingsContextType {
     lastName?: string;
     bio?: string;
     profilePicture?: string | null;
+    phoneNumber?: string | null;
   }) => Promise<void>;
   toggleTwoFactor: (enabled: boolean) => Promise<void>;
   resetSettings: () => Promise<void>;

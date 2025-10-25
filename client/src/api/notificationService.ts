@@ -1,7 +1,4 @@
-import axios from 'axios';
-import { auth } from '../config/firebase';
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+import api from './api';
 
 export interface Notification {
   id: string;
@@ -49,17 +46,6 @@ export interface ApiResponse<T = any> {
 }
 
 class NotificationService {
-  private async getAuthHeaders() {
-    // Use the JWT token from localStorage instead of Firebase ID token
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-  }
 
   async getNotifications(filters: NotificationFilters = {}): Promise<{ notifications: Notification[]; pagination: any }> {
     try {
@@ -71,10 +57,7 @@ class NotificationService {
       if (filters.type) params.append('type', filters.type);
       if (filters.facilityId) params.append('facilityId', filters.facilityId);
 
-      const response = await axios.get(`${API_BASE_URL}/notifications?${params}`, {
-        headers: await this.getAuthHeaders()
-      });
-
+      const response = await api.get(`/notifications?${params}`);
       return response.data;
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
@@ -87,10 +70,7 @@ class NotificationService {
       const params = new URLSearchParams();
       if (facilityId) params.append('facilityId', facilityId);
 
-      const response = await axios.get(`${API_BASE_URL}/notifications/stats?${params}`, {
-        headers: await this.getAuthHeaders()
-      });
-
+      const response = await api.get(`/notifications/stats?${params}`);
       return response.data.stats;
     } catch (error: any) {
       console.error('Error fetching notification stats:', error);
@@ -103,11 +83,8 @@ class NotificationService {
       const params = new URLSearchParams();
       if (facilityId) params.append('facilityId', facilityId);
 
-      const response = await axios.get(`${API_BASE_URL}/notifications/unread-count?${params}`, {
-        headers: await this.getAuthHeaders()
-      });
-
-      return response.data.count;
+      const response = await api.get(`/notifications/unread-count?${params}`);
+      return response.data.count || 0;
     } catch (error: any) {
       console.error('Error fetching unread count:', error);
       return 0;
@@ -116,10 +93,7 @@ class NotificationService {
 
   async markAsRead(notificationId: string): Promise<Notification> {
     try {
-      const response = await axios.put(`${API_BASE_URL}/notifications/${notificationId}/read`, {}, {
-        headers: await this.getAuthHeaders()
-      });
-
+      const response = await api.put(`/notifications/${notificationId}/read`, {});
       return response.data.notification;
     } catch (error: any) {
       console.error('Error marking notification as read:', error);
@@ -129,12 +103,9 @@ class NotificationService {
 
   async markAllAsRead(facilityId?: string): Promise<{ updated: number }> {
     try {
-      const response = await axios.put(`${API_BASE_URL}/notifications/mark-all-read`, {
+      const response = await api.put(`/notifications/mark-all-read`, {
         facilityId
-      }, {
-        headers: await this.getAuthHeaders()
       });
-
       return { updated: response.data.updated };
     } catch (error: any) {
       console.error('Error marking all notifications as read:', error);
@@ -144,13 +115,16 @@ class NotificationService {
 
   async deleteNotification(notificationId: string): Promise<void> {
     try {
-      await axios.delete(`${API_BASE_URL}/notifications/${notificationId}`, {
-        headers: await this.getAuthHeaders()
-      });
+      await api.delete(`/notifications/${notificationId}`);
     } catch (error: any) {
       console.error('Error deleting notification:', error);
       throw new Error(error.response?.data?.message || 'Failed to delete notification');
     }
+  }
+
+  // Refresh notifications (useful for retry functionality)
+  async refreshNotifications(filters: NotificationFilters = {}): Promise<{ notifications: Notification[]; pagination: any }> {
+    return this.getNotifications(filters);
   }
 
 }

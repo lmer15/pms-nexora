@@ -57,10 +57,6 @@ class Notification extends FirestoreService {
         conditions.push({ field: 'type', operator: '==', value: type });
       }
 
-      if (facilityId) {
-        conditions.push({ field: 'facilityId', operator: '==', value: facilityId });
-      }
-
       const notifications = await this.query(conditions);
       
       // Sort by creation date (newest first) and apply pagination

@@ -134,8 +134,6 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
     const isExpanded = expandedSections.has('facilities');
     const filtered = filteredFacilities(facilities);
     const recentFiltered = filteredFacilities(recentFacilities);
-    
-    if (filtered.length === 0 && !searchTerm) return null;
 
     return (
       <div className="mb-2">
@@ -281,12 +279,6 @@ const CollapsibleFacilitiesList: React.FC<CollapsibleFacilitiesListProps> = ({
         {/* Facilities Section */}
         {!loading && renderFacilitiesSection()}
 
-        {/* Empty State */}
-        {!loading && facilities.length === 0 && !isCollapsed && (
-          <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
-            No facilities yet
-          </div>
-        )}
       </div>
 
       <CreateFacilityModal

@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../config/firebase';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
-import AccountLinkingPrompt from '../../components/AccountLinkingPrompt';
-import { accountLinkingService } from '../../api/accountLinkingService';
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import PasswordSetupModal from '../../components/PasswordSetupModal';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function Login() {
-  const { login, googleLogin, sendVerificationEmail } = useAuth();
+  const { login, googleLogin, sendVerificationEmail, setPasswordForGoogleUser } = useAuth();
+  const { isDarkMode } = useTheme();
 
   // Login state
   const [loginEmail, setLoginEmail] = useState("");
@@ -17,10 +18,9 @@ export default function Login() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   
-  // Account linking state
-  const [showLinkingPrompt, setShowLinkingPrompt] = useState(false);
-  const [linkingEmail, setLinkingEmail] = useState('');
-  const [existingMethod, setExistingMethod] = useState<'google' | 'email_password'>('google');
+  // Password setup state
+  const [showPasswordSetup, setShowPasswordSetup] = useState(false);
+  const [googleUser, setGoogleUser] = useState(null);
 
   // Handle login
   const handleLogin = async (e: React.FormEvent) => {
@@ -31,62 +31,32 @@ export default function Login() {
     try {
       await login(loginEmail, loginPassword);
     } catch (err: any) {
-      // Check if this might be a Google account that needs linking
-      if (err.code === 'auth/user-not-found' ||
-          err.code === 'auth/invalid-credential' ||
-          err.message === 'Account not found. Please sign up with Google.' ||
-          err.message === 'Invalid credentials provided.') {
-        
-        // First check if account is already linked
-        try {
-          const accountInfo = await accountLinkingService.checkAccountType(loginEmail);
-          
-          // Show linking prompt if account exists but is missing one method
-          if (accountInfo.exists && accountInfo.authMethods.length === 1) {
-            setLinkingEmail(loginEmail);
-            // Determine which method is missing
-            if (!accountInfo.authMethods.includes('email_password')) {
-              setExistingMethod('google'); // User has Google, needs email/password
-            } else {
-              setExistingMethod('email_password'); // User has email/password, needs Google
-            }
-            setShowLinkingPrompt(true);
-            setLoginError('');
-            return;
-          } else {
-            // Account is already linked or doesn't exist, show normal error
-            setLoginError(err.message);
-          }
-        } catch (checkError) {
-          setLoginError(err.message);
-        }
-      } else {
-        setLoginError(err.message);
-      }
+      setLoginError(err.message);
     } finally {
       setLoginLoading(false);
     }
   };
 
-
-
   // Handle Google login
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      // Configure provider settings
       provider.setCustomParameters({
         prompt: 'select_account'
       });
 
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
-
-      await googleLogin(idToken);
+      const response = await googleLogin(idToken);
+      
+      // Check if user needs to set password
+      if (response && response.needsPasswordSetup) {
+        setGoogleUser(response.user);
+        setShowPasswordSetup(true);
+      }
+      // If user doesn't need password setup, App.tsx will handle navigation
     } catch (err: any) {
       console.error('Google login error:', err);
-
-      // Handle specific error types
       let errorMessage = 'Google sign-in failed. Please try again.';
 
       if (err.code === 'auth/popup-closed-by-user') {
@@ -97,7 +67,6 @@ export default function Login() {
         errorMessage = 'Sign-in was cancelled.';
       } else if (err.message && err.message.includes('Cross-Origin-Opener-Policy')) {
         errorMessage = 'Authentication completed successfully. Redirecting...';
-        // Don't show error for COOP issues as auth might still succeed
         return;
       } else if (err.message) {
         errorMessage = err.message;
@@ -107,7 +76,7 @@ export default function Login() {
     }
   };
 
-  // Handle resend verification email
+  // Handle resend verification
   const handleResendVerification = async () => {
     try {
       await sendVerificationEmail();
@@ -117,115 +86,43 @@ export default function Login() {
     }
   };
 
-  // Handle account linking
-  const handleLinkAccount = async (password: string) => {
+  // Handle password setup
+  const handlePasswordSetup = async (password: string) => {
     try {
-      if (existingMethod === 'google') {
-        // Linking email/password to Google account
-        let currentUser = auth.currentUser;
-        let idToken = '';
-
-        if (currentUser && currentUser.email === loginEmail) {
-          // User is already signed in with the correct email
-          idToken = await currentUser.getIdToken();
-        } else {
-          // User needs to sign in with Google
-          const provider = new GoogleAuthProvider();
-          provider.setCustomParameters({
-            prompt: 'select_account'
-          });
-
-          const result = await signInWithPopup(auth, provider);
-          idToken = await result.user.getIdToken();
-
-          // Verify the Google account email matches the email they're trying to link
-          if (result.user.email !== loginEmail) {
-            throw new Error('Google account email does not match the email you entered');
-          }
-        }
-
-        // Use the password they already entered in the login form
-        const passwordToUse = password || loginPassword;
-
-        // Link the email/password to the Google account
-        const response = await accountLinkingService.linkEmailPassword(idToken, passwordToUse);
-        
-        if (response.success) {
-          setShowLinkingPrompt(false);
-          setLoginError('✅ Account linked successfully! You can now login with email/password.');
-          
-          setTimeout(() => {
-            if (auth.currentUser) {
-              window.location.href = '/resources/analytics/global';
-            } else {
-              setLoginError('✅ Account linked successfully! Please login with your email/password.');
-            }
-          }, 2000);
-        } else {
-          throw new Error(response.message || 'Failed to link account');
-        }
-      } else {
-        // Linking Google to email/password account
-        // First authenticate with email/password to get the account
-        const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-        const idToken = await userCredential.user.getIdToken();
-
-        // Then authenticate with Google
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({
-          prompt: 'select_account'
-        });
-
-        const googleResult = await signInWithPopup(auth, provider);
-        const googleIdToken = await googleResult.user.getIdToken();
-
-        // Verify the Google account email matches
-        if (googleResult.user.email !== loginEmail) {
-          throw new Error('Google account email does not match the email you entered');
-        }
-
-        // Link Google to the email/password account
-        const response = await accountLinkingService.linkGoogleAccount(idToken, googleIdToken);
-        
-        if (response.success) {
-          setShowLinkingPrompt(false);
-          setLoginError('✅ Account linked successfully! You can now login with Google.');
-          
-          setTimeout(() => {
-            if (auth.currentUser) {
-              window.location.href = '/resources/analytics/global';
-            } else {
-              setLoginError('✅ Account linked successfully! Please login with your preferred method.');
-            }
-          }, 2000);
-        } else {
-          throw new Error(response.message || 'Failed to link account');
-        }
-      }
+      await setPasswordForGoogleUser(password);
+      setShowPasswordSetup(false);
+      setGoogleUser(null);
     } catch (err: any) {
-      console.error('Account linking error:', err);
-      try {
-        await auth.signOut();
-      } catch (signOutError) {
-        // Silent error handling
-      }
-      throw new Error(err.message || 'Failed to link account');
+      console.error('Password setup error:', err);
+      throw err;
     }
   };
 
-  // Handle using existing method
-  const handleUseExistingMethod = () => {
-    setShowLinkingPrompt(false);
-    if (existingMethod === 'google') {
-      handleGoogleLogin();
-    }
-  };
-
-  // Handle cancel linking
-  const handleCancelLinking = () => {
-    setShowLinkingPrompt(false);
-    setLinkingEmail('');
-  };
+  if (verificationSent) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md bg-white shadow-xl rounded-lg p-8 text-center">
+          <div className="mb-6">
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Verification Email Sent</h2>
+          <p className="text-gray-600 mb-6">
+            We've sent a verification link to <strong>{loginEmail}</strong>. Please check your email and click the link to verify your account.
+          </p>
+          <button
+            onClick={() => setVerificationSent(false)}
+            className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
@@ -242,52 +139,34 @@ export default function Login() {
         alt="Right Background"
         className="absolute bottom-0 right-0 w-50 h-50 object-cover"
       />
+      
       <div className="w-full max-w-4xl flex bg-white shadow-xl rounded-lg overflow-hidden relative">
-
-      {/* Left Side */}
-      <div className="hidden md:flex md:w-1/2 flex-col text-white items-center justify-between p-10 relative">
+        {/* Left Side */}
+        <div className="hidden md:flex md:w-1/2 flex-col text-white items-center justify-between p-10 relative">
           <div className="flex items-center justify-start w-full mb-6">
             <img src="/images/nexora.png" alt="Logo" className="h-9 w-9 mr-2" />
             <h2 className="text-2xl font-black text-green-700">Nexora</h2>
           </div>
-        <img src="/images/icon.png" alt="Nexora" className="h-100 w-100 mt-auto mb-auto" />
-        <p className="text-sm text-gray-400 mt-2">Copyright © 2025 Nexora Reserve</p>
-      </div>
+          <img src="/images/icon.png" alt="Nexora" className="h-100 w-100 mt-auto mb-auto" />
+          <p className="text-sm text-gray-400 mt-2">Copyright © 2025 Nexora Reserve</p>
+        </div>
 
         {/* Vertical Line */}
         <div className="hidden md:block absolute top-10 bottom-10 left-1/2 w-px bg-gray-300"></div>
 
         {/* Right Side */}
         <div className="w-full md:w-1/2 p-10 flex flex-col justify-center z-10">
-          <h2 className="text-3xl font-bold text-center mb-6">Log In</h2>
+          <h2 className="text-3xl font-bold text-center mb-6">Welcome Back</h2>
           
-
           {loginError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {loginError}
             </div>
           )}
 
-          {/* Email verification prompt */}
-          {loginError === 'Please verify your email before logging in.' && (
-            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-              <p>Please verify your email address.</p>
-              {!verificationSent ? (
-                <button
-                  onClick={handleResendVerification}
-                  className="text-green-600 hover:underline mt-2"
-                >
-                  Resend verification email
-                </button>
-              ) : (
-                <p className="text-green-600 mt-2">Verification email sent!</p>
-              )}
-            </div>
-          )}
-
           <form onSubmit={handleLogin}>
             {/* Email */}
-            <div className="relative mb-6">
+            <div className="relative mb-4">
               <input
                 type="email"
                 id="loginEmail"
@@ -308,7 +187,7 @@ export default function Login() {
             </div>
 
             {/* Password */}
-            <div className="relative mb-4">
+            <div className="relative mb-6">
               <input
                 type={loginShowPassword ? "text" : "password"}
                 id="loginPassword"
@@ -331,7 +210,6 @@ export default function Login() {
                 onClick={() => setLoginShowPassword(!loginShowPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-green-500"
               >
-                {/* Eye SVG */}
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 relative" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -342,20 +220,13 @@ export default function Login() {
               </button>
             </div>
 
-            {/* Forgot Password */}
-            <div className="flex justify-end mb-4">
-              <a href="#" className="text-green-600 hover:underline text-sm">
-                Forgot Password?
-              </a>
-            </div>
-
             {/* Login Button */}
             <button
               type="submit"
               disabled={loginLoading}
               className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition mb-6 disabled:bg-green-400"
             >
-              {loginLoading ? 'Logging in...' : 'Log In'}
+              {loginLoading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
@@ -384,23 +255,20 @@ export default function Login() {
             <p className="text-gray-600">
               Don't have an account?{' '}
               <Link to="/register" className="text-green-600 hover:underline">
-                Create one
+                Sign up
               </Link>
             </p>
           </div>
         </div>
       </div>
-
-      {/* Account Linking Prompt */}
-      {showLinkingPrompt && (
-        <AccountLinkingPrompt
-          email={linkingEmail}
-          existingMethod={existingMethod}
-          onLinkAccount={handleLinkAccount}
-          onUseExistingMethod={handleUseExistingMethod}
-          onCancel={handleCancelLinking}
-        />
-      )}
+      
+      {/* Password Setup Modal */}
+      <PasswordSetupModal
+        isOpen={showPasswordSetup}
+        onClose={() => setShowPasswordSetup(false)}
+        onPasswordSet={handlePasswordSetup}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

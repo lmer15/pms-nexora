@@ -1,6 +1,8 @@
 const cron = require('node-cron');
 const Task = require('../models/Task');
 const notificationService = require('./notificationService');
+const fs = require('fs').promises;
+const path = require('path');
 
 class SchedulerService {
   constructor() {
@@ -30,6 +32,8 @@ class SchedulerService {
     const cleanupJob = cron.schedule('0 2 * * *', async () => {
       console.log('Running notification cleanup...');
       await this.cleanupExpiredNotifications();
+      console.log('Running PDF cleanup...');
+      await this.cleanupExpiredPDFs();
     }, {
       scheduled: false,
       timezone: 'UTC'
@@ -188,6 +192,49 @@ class SchedulerService {
       console.log(`Cleaned up ${result.deleted} expired notifications`);
     } catch (error) {
       console.error('Error cleaning up expired notifications:', error);
+    }
+  }
+
+  // Clean up expired PDF files from temp directory
+  async cleanupExpiredPDFs() {
+    try {
+      console.log('Cleaning up expired PDF files...');
+      const tempDir = path.join(__dirname, '../temp');
+      
+      // Check if temp directory exists
+      try {
+        await fs.access(tempDir);
+      } catch {
+        console.log('Temp directory does not exist, skipping PDF cleanup');
+        return;
+      }
+
+      const files = await fs.readdir(tempDir);
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      let deletedCount = 0;
+
+      for (const file of files) {
+        if (file.endsWith('.pdf')) {
+          const filePath = path.join(tempDir, file);
+          try {
+            const stats = await fs.stat(filePath);
+            const fileAge = now - stats.mtime.getTime();
+            
+            if (fileAge > maxAge) {
+              await fs.unlink(filePath);
+              deletedCount++;
+              console.log(`Deleted expired PDF: ${file}`);
+            }
+          } catch (error) {
+            console.error(`Error processing file ${file}:`, error);
+          }
+        }
+      }
+
+      console.log(`Cleaned up ${deletedCount} expired PDF files`);
+    } catch (error) {
+      console.error('Error cleaning up expired PDFs:', error);
     }
   }
 

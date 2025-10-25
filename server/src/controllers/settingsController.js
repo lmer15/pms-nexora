@@ -1,6 +1,9 @@
 const UserSettings = require('../models/UserSettings');
 const User = require('../models/User');
 const { admin } = require('../config/firebase-admin');
+const fileUploadService = require('../services/fileUploadService');
+const path = require('path');
+const cacheService = require('../services/cacheService');
 
 // Get user settings
 exports.getSettings = async (req, res) => {
@@ -99,7 +102,7 @@ exports.updateSection = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { firstName, lastName, bio, profilePicture } = req.body;
+    const { firstName, lastName, bio, profilePicture, phoneNumber } = req.body;
 
     // Validate profile data
     if (firstName && firstName.length > 50) {
@@ -120,19 +123,41 @@ exports.updateProfile = async (req, res) => {
         message: 'Bio must be less than 500 characters'
       });
     }
+    if (phoneNumber && phoneNumber.length > 20) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number must be less than 20 characters'
+      });
+    }
 
     // Update User model for basic profile info
     const userUpdateData = {};
     if (firstName !== undefined) userUpdateData.firstName = firstName;
     if (lastName !== undefined) userUpdateData.lastName = lastName;
     if (profilePicture !== undefined) userUpdateData.profilePicture = profilePicture;
+    if (phoneNumber !== undefined) userUpdateData.phoneNumber = phoneNumber;
 
     if (Object.keys(userUpdateData).length > 0) {
-      await User.updateProfile(userId, userUpdateData);
+      console.log(`Updating User model for user ${userId} with data:`, userUpdateData);
+      const updatedUser = await User.updateProfile(userId, userUpdateData);
+      console.log(`User model updated successfully:`, updatedUser);
+
+      try {
+        const UserFacility = require('../models/UserFacility');
+        const userFacilities = await UserFacility.findByUser(userId);
+        
+        for (const userFacility of userFacilities) {
+          cacheService.invalidateFacilityMembers(userFacility.facilityId);
+        }
+        console.log(`Invalidated facility members cache for user ${userId} in ${userFacilities.length} facilities`);
+      } catch (cacheError) {
+        console.error('Error invalidating facility members cache:', cacheError);
+        // Don't fail the request if cache invalidation fails
+      }
     }
 
-    // Update settings for bio and other profile preferences
-    const profileSettings = { firstName, lastName, bio, profilePicture };
+    // Update settings for bio and other profile preferences (exclude profilePicture - it's only in users collection)
+    const profileSettings = { firstName, lastName, bio, phoneNumber };
     const updatedSettings = await UserSettings.updateSection(userId, 'profile', profileSettings);
     
     res.json({
@@ -295,6 +320,110 @@ exports.deleteAccount = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete user account'
+    });
+  }
+};
+
+// Upload profile image
+exports.uploadProfileImage = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Use multer middleware to handle file upload
+    fileUploadService.uploadFiles(req, res, async (err) => {
+      if (err) {
+        console.error('Profile image upload error:', err);
+        return res.status(400).json({ 
+          success: false,
+          message: err.message || 'Profile image upload failed' 
+        });
+      }
+
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'No image file uploaded' 
+        });
+      }
+
+      if (req.files.length > 1) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Only one image file is allowed' 
+        });
+      }
+
+      try {
+        const file = req.files[0];
+        
+        // Validate it's an image
+        if (!file.mimetype.startsWith('image/')) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'Only image files are allowed' 
+          });
+        }
+
+        // Create the file URL - use full URL for consistency
+        const baseUrl = process.env.API_BASE_URL || 'http://localhost:5000';
+        const fileUrl = `${baseUrl}/uploads/attachments/${file.filename}`;
+        const relativeUrl = `/uploads/attachments/${file.filename}`;
+        
+        // Update user's profile picture in database with full URL
+        await User.update(userId, { profilePicture: fileUrl });
+        
+        // Invalidate cache for all facilities this user is a member of
+        try {
+          const UserFacility = require('../models/UserFacility');
+          const userFacilities = await UserFacility.findByUser(userId);
+          for (const userFacility of userFacilities) {
+            cacheService.invalidateFacilityMembers(userFacility.facilityId);
+          }
+          console.log(`Invalidated facility members cache for user ${userId} in ${userFacilities.length} facilities after image upload`);
+        } catch (cacheError) {
+          console.error('Error invalidating facility members cache after image upload:', cacheError);
+          // Don't fail the request if cache invalidation fails
+        }
+        
+        // Also update Firebase user's photoURL with full URL
+        const user = await User.findById(userId);
+        if (user && user.firebaseUid) {
+          try {
+            await admin.auth().updateUser(user.firebaseUid, {
+              photoURL: fileUrl
+            });
+          } catch (firebaseError) {
+            console.error('Error updating Firebase user photo:', firebaseError);
+            // Don't fail the request if Firebase update fails
+          }
+        }
+
+        res.json({
+          success: true,
+          message: 'Profile image uploaded successfully',
+          imageUrl: fileUrl
+        });
+      } catch (dbError) {
+        console.error('Database error after image upload:', dbError);
+        
+        // Clean up uploaded file if database operation failed
+        try {
+          await fileUploadService.deleteFile(file.filename);
+        } catch (cleanupError) {
+          console.error('Error cleaning up uploaded file:', cleanupError);
+        }
+        
+        res.status(500).json({
+          success: false,
+          message: 'Failed to save profile image'
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error uploading profile image'
     });
   }
 };

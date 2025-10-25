@@ -65,6 +65,7 @@ exports.firebaseGoogleAuth = async (req, res) => {
 
     // Find or create user
     let user = await User.findByEmail(email);
+    let isNewUser = false;
 
     if (!user) {
       // Extract first and last name from Google profile
@@ -80,6 +81,8 @@ exports.firebaseGoogleAuth = async (req, res) => {
         isEmailVerified: true, // Google emails are verified
         profilePicture: picture
       });
+
+      isNewUser = true;
 
       // Send welcome email on first login
       try {
@@ -99,16 +102,20 @@ exports.firebaseGoogleAuth = async (req, res) => {
     // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
+    // Get user profile with URL conversion
+    const userProfile = await User.getProfile(user.id);
+
     res.json({
       message: 'Login successful',
       token,
+      needsPasswordSetup: isNewUser, // New users need to set password
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        isEmailVerified: user.isEmailVerified,
-        profilePicture: user.profilePicture
+        id: userProfile.id,
+        email: userProfile.email,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        isEmailVerified: userProfile.isEmailVerified,
+        profilePicture: userProfile.profilePicture
       }
     });
   } catch (error) {
@@ -217,16 +224,19 @@ exports.firebaseSync = async (req, res) => {
     // Generate JWT token with database user ID
     const token = generateToken(user.id);
 
+    // Get user profile with URL conversion
+    const userProfile = await User.getProfile(user.id);
+    
     res.json({
       message: 'Sync successful',
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        isEmailVerified: user.isEmailVerified,
-        profilePicture: user.profilePicture
+        id: userProfile.id,
+        email: userProfile.email,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        isEmailVerified: userProfile.isEmailVerified,
+        profilePicture: userProfile.profilePicture
       }
     });
   } catch (error) {
@@ -448,6 +458,69 @@ exports.linkEmailPassword = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error during account linking'
+    });
+  }
+};
+
+// Set password for Google users
+exports.setPasswordForGoogleUser = async (req, res) => {
+  try {
+    const { password } = req.body;
+    const userId = req.user.id; // From auth middleware
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required'
+      });
+    }
+
+    // Get user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update Firebase user with password (this adds email/password provider)
+    try {
+      await admin.auth().updateUser(user.firebaseUid, {
+        password: password
+      });
+
+      // Update user record to track auth methods
+      await User.updateAuthMethods(userId, ['google', 'email_password']);
+
+      res.json({
+        success: true,
+        message: 'Password successfully set for your account',
+        authMethods: ['google', 'email_password']
+      });
+
+    } catch (firebaseError) {
+      console.error('Firebase password setup error:', firebaseError);
+      
+      // Handle specific Firebase errors
+      if (firebaseError.code === 'auth/weak-password') {
+        res.status(400).json({
+          success: false,
+          message: 'Password is too weak. Please choose a stronger password.'
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to set password. Please try again.'
+        });
+      }
+    }
+
+  } catch (error) {
+    console.error('Set password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during password setup'
     });
   }
 };

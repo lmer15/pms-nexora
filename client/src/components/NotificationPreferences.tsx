@@ -27,8 +27,8 @@ const NotificationPreferences: React.FC<NotificationPreferencesProps> = ({ userI
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const userSettings = await settingsService.getUserSettings(userId);
-      setSettings(userSettings);
+      const response = await settingsService.getSettings();
+      setSettings(response.data || null);
     } catch (error) {
       console.error('Error loading notification settings:', error);
       setMessage({ type: 'error', text: 'Failed to load notification settings' });
@@ -42,7 +42,7 @@ const NotificationPreferences: React.FC<NotificationPreferencesProps> = ({ userI
 
     try {
       setSaving(true);
-      await settingsService.updateUserSettings(userId, settings);
+      await settingsService.updateSettings(settings);
       setMessage({ type: 'success', text: 'Notification preferences saved successfully' });
     } catch (error) {
       console.error('Error saving notification settings:', error);

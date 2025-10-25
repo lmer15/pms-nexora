@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LucideGrid,
   LucideClipboardList,
@@ -31,6 +31,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   return (
@@ -152,8 +153,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
               </NavLink>
             </Tooltip>
 
-
-
             <Tooltip content="Settings" position="right" disabled={!isCollapsed}>
               <NavLink
                 to="/menu-settings"
@@ -236,15 +235,27 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isDarkMode }) 
                   isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                 }`}>
                   <div className="py-1">
-                    <button className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>
+                    <button 
+                      onClick={() => {
+                        navigate('/profile-settings');
+                        setIsProfileOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}
+                    >
                       <LucideUser className="w-3.5 h-3.5 inline mr-2" />
                       Profile Settings
                     </button>
-                    <button className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>
+                    <button 
+                      onClick={() => {
+                        navigate('/help-support');
+                        setIsProfileOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}
+                    >
                       <LucideHelpCircle className="w-3.5 h-3.5 inline mr-2" />
                       Help & Support
                     </button>

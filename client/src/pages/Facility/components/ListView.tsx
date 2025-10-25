@@ -894,7 +894,7 @@ const ListView: React.FC<ListViewProps> = ({
                               }>
                                 <Tooltip content={`Click to open task details • Double-click to edit title`}>
                                   <span
-                                    className={`text-xs cursor-pointer hover:text-brand transition-colors ${isDarkMode ? 'text-gray-900' : 'text-gray-700'}`}
+                                    className={`text-xs cursor-pointer hover:text-brand transition-colors ${isDarkMode ? 'text-gray-100' : 'text-gray-700'}`}
                                     onDoubleClick={() => startEditing(task.id, 'title', task.title)}
                                     onClick={() => onTaskClick(task.id)}
                                   >

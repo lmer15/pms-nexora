@@ -18,6 +18,9 @@ router.put('/section/:section', settingsController.updateSection);
 // Update user profile (special endpoint)
 router.put('/profile', settingsController.updateProfile);
 
+// Upload profile image
+router.post('/profile/image', settingsController.uploadProfileImage);
+
 // Change password
 router.put('/password', settingsController.changePassword);
 

@@ -55,7 +55,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   onSwitchToDependencies,
   onSwitchToSubtasks
 }) => {
-  const { memberRefreshTriggers, triggerUserProfileRefresh } = useFacilityRefresh();
+  const { memberRefreshTriggers, triggerUserProfileRefresh, userProfileRefreshTrigger } = useFacilityRefresh();
   const [editingField, setEditingField] = React.useState<string | null>(null);
   const [facilityMembers, setFacilityMembers] = React.useState<FacilityMember[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -73,7 +73,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     if (facilityId) {
       loadFacilityMembers();
     }
-  }, [facilityId, memberRefreshTriggers[facilityId || '']]);
+  }, [facilityId, memberRefreshTriggers[facilityId || ''], userProfileRefreshTrigger]);
 
   // Handle click outside to close priority dropdown
   React.useEffect(() => {
@@ -96,13 +96,16 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
     if (!facilityId) return;
     setLoadingMembers(true);
     try {
+      console.log(`TaskDetailCoreDetails: Loading facility members for facility ${facilityId}`);
       const members = await facilityService.getFacilityMembers(facilityId);
+      console.log(`TaskDetailCoreDetails: Loaded ${members.length} facility members:`, members);
       
       // Deduplicate facility members to prevent duplicate keys
       const uniqueMembers = members.filter((member, index, self) => 
         index === self.findIndex(m => m.id === member.id)
       );
       
+      console.log(`TaskDetailCoreDetails: Setting ${uniqueMembers.length} unique members`);
       setFacilityMembers(uniqueMembers);
     } catch (error) {
       console.error('Failed to load facility members:', error);
@@ -120,9 +123,7 @@ const TaskDetailCoreDetails: React.FC<TaskDetailCoreDetailsProps> = ({
   });
 
   const filteredAndExcludedMembers = filteredMembers.filter(m => {
-    // Exclude the project owner
-    if (m.id === excludeUserId) return false;
-    
+
     // Exclude already assigned members
     const currentAssignees = editedTask.assigneeIds || task.assigneeIds || [];
     const singleAssignee = editedTask.assignee || task.assignee;

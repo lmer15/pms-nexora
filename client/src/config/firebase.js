@@ -31,4 +31,7 @@ auth.settings = {
   popupRedirectResolver: undefined
 };
 
+// Configure email action settings to use our custom verification page
+auth.settings.appVerificationDisabledForTesting = false;
+
 export default app;

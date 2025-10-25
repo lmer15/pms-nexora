@@ -26,6 +26,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       '/time-log': 'Time Log',
       '/menu-settings': 'Settings',
       '/notes': 'Notes',
+      '/help-support': 'Help & Support',
+      '/profile-settings': 'Profile Settings',
       '/resources/analytics/global': 'Dashboard Analytics'
     };
     

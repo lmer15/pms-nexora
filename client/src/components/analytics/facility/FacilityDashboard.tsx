@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
+import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import FacilityKpiStrip from './FacilityKpiStrip';
 import FacilityCharts from './FacilityCharts';
 import FacilityCalendar from './FacilityCalendar';
@@ -26,6 +27,7 @@ const FacilityDashboard: React.FC<FacilityDashboardProps> = ({
   const navigate = useNavigate();
   const { facilityId } = useParams<{ facilityId: string }>();
   const { token } = useAuth();
+  const { refreshTrigger, userProfileRefreshTrigger } = useFacilityRefresh();
   const [data, setData] = useState<FacilityAnalyticsResponse | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,7 +120,7 @@ const FacilityDashboard: React.FC<FacilityDashboardProps> = ({
     } else {
       setLoading(false);
     }
-  }, [timeRange, facilityId, token]);
+  }, [timeRange, facilityId, token, refreshTrigger, userProfileRefreshTrigger]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {

@@ -750,6 +750,13 @@ exports.getFacilityMembers = async (req, res) => {
 
           // Build full name from available fields
           let fullName = '';
+          console.log(`Building fullName for user ${userDatabaseId}:`, {
+            firstName: user.firstName,
+            lastName: user.lastName,
+            displayName: user.displayName,
+            email: user.email
+          });
+          
           if (user.firstName && user.lastName) {
             fullName = `${user.firstName} ${user.lastName}`.trim();
           } else if (user.firstName) {
@@ -763,6 +770,8 @@ exports.getFacilityMembers = async (req, res) => {
           } else {
             fullName = `User ${relation.userId.substring(0, 8)}`;
           }
+          
+          console.log(`Final fullName for user ${userDatabaseId}:`, fullName);
 
 
           return {

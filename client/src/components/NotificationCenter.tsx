@@ -34,9 +34,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     notifications, 
     unreadCount, 
     loading, 
+    error,
     markAsRead, 
     markAllAsRead, 
-    deleteNotification 
+    deleteNotification,
+    refreshNotifications
   } = useRealtimeNotifications();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -79,9 +81,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     if (selectedCategory !== 'all' && notification.category !== selectedCategory) return false;
     // Only filter by facility if both currentFacility and notification.facilityId are set
     // Allow notifications with null facilityId (system notifications) to show
-    if (currentFacility?.id && notification.facilityId && notification.facilityId !== currentFacility.id) return false;
+    if (currentFacility?.id && notification.facilityId && notification.facilityId !== currentFacility.id) {
+      return false;
+    }
     return true;
   });
+
 
   const getNotificationIcon = (category: string, type: string) => {
     switch (category) {
@@ -146,29 +151,33 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   const handleNotificationClick = (notification: any) => {
-    // Mark as read if unread (but don't fail if it doesn't work)
-    if (!notification.read) {
-      markAsRead(notification.id).catch(err => {
-        console.warn('Failed to mark notification as read:', err);
-        // Continue with navigation even if mark as read fails
-      });
-    }
-    
-    // Navigate to the action URL if it exists
-    if (notification.actionUrl) {
-      // Handle both old and new URL formats
-      let targetUrl = notification.actionUrl;
-      
-      // If it's an old format URL (contains /project/ and /task/), extract just the facility ID
-      if (targetUrl.includes('/project/') && targetUrl.includes('/task/')) {
-        const facilityMatch = targetUrl.match(/\/facility\/([^\/]+)/);
-        if (facilityMatch) {
-          targetUrl = `/facility/${facilityMatch[1]}`;
-        }
+    try {
+      // Mark as read if unread (but don't fail if it doesn't work)
+      if (!notification.read) {
+        markAsRead(notification.id).catch(err => {
+          console.warn('Failed to mark notification as read:', err);
+          // Continue with navigation even if mark as read fails
+        });
       }
       
-      navigate(targetUrl);
-      onClose(); // Close the notification center
+      // Navigate to the action URL if it exists
+      if (notification.actionUrl) {
+        // Handle both old and new URL formats
+        let targetUrl = notification.actionUrl;
+        
+        // If it's an old format URL (contains /project/ and /task/), extract just the facility ID
+        if (targetUrl.includes('/project/') && targetUrl.includes('/task/')) {
+          const facilityMatch = targetUrl.match(/\/facility\/([^\/]+)/);
+          if (facilityMatch) {
+            targetUrl = `/facility/${facilityMatch[1]}`;
+          }
+        }
+        
+        navigate(targetUrl);
+        onClose(); // Close the notification center
+      }
+    } catch (error) {
+      console.error('Error handling notification click:', error);
     }
   };
 
@@ -253,6 +262,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         {loading ? (
           <div className="p-4 text-center text-gray-500 dark:text-gray-400">
             Loading notifications...
+          </div>
+        ) : error ? (
+          <div className="p-4 text-center text-red-500 dark:text-red-400">
+            <LucideAlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <p>{error}</p>
+            <button
+              onClick={refreshNotifications}
+              className="mt-2 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Retry
+            </button>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="p-4 text-center text-gray-500 dark:text-gray-400">
@@ -345,7 +365,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         <button
           onClick={() => {
             // Navigate to notification settings
-            window.location.href = '/settings?tab=notifications';
+            window.location.href = '/menu-settings';
           }}
           className="w-full flex items-center justify-center space-x-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300"
         >

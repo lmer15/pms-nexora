@@ -5,24 +5,7 @@ const firebaseAuthMiddleware = require('../middleware/firebaseAuthMiddleware');
 // Get user's notifications
 exports.getNotifications = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
-    
-    // Convert Firebase UID to database user ID
-    const User = require('../models/User');
-    let databaseUserId = firebaseUserId;
-    
-    try {
-      // Check if firebaseUserId is a Firebase UID (longer string) or database ID
-      if (firebaseUserId.length > 20) {
-        const user = await User.findByFirebaseUid(firebaseUserId);
-        if (user) {
-          databaseUserId = user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Error converting user ID for notification query:', error);
-      // Fallback to original ID
-    }
+    const databaseUserId = req.userId; // authMiddleware provides database user ID directly
     
     const {
       limit = 50,
@@ -64,23 +47,8 @@ exports.getNotifications = async (req, res) => {
 // Get notification statistics
 exports.getNotificationStats = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
+    const databaseUserId = req.userId; // authMiddleware provides database user ID directly
     const { facilityId } = req.query;
-
-    // Convert Firebase UID to database user ID
-    const User = require('../models/User');
-    let databaseUserId = firebaseUserId;
-    
-    try {
-      if (firebaseUserId.length > 20) {
-        const user = await User.findByFirebaseUid(firebaseUserId);
-        if (user) {
-          databaseUserId = user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Error converting user ID for stats:', error);
-    }
 
     const notificationModel = new Notification();
     const stats = await notificationModel.getNotificationStats(databaseUserId, facilityId);
@@ -101,23 +69,8 @@ exports.getNotificationStats = async (req, res) => {
 // Get unread notification count
 exports.getUnreadCount = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
+    const databaseUserId = req.userId; // authMiddleware provides database user ID directly
     const { facilityId } = req.query;
-
-    // Convert Firebase UID to database user ID
-    const User = require('../models/User');
-    let databaseUserId = firebaseUserId;
-    
-    try {
-      if (firebaseUserId.length > 20) {
-        const user = await User.findByFirebaseUid(firebaseUserId);
-        if (user) {
-          databaseUserId = user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Error converting user ID for unread count:', error);
-    }
 
     const notificationModel = new Notification();
     const count = await notificationModel.getUnreadCount(databaseUserId, facilityId);
@@ -138,23 +91,8 @@ exports.getUnreadCount = async (req, res) => {
 // Mark notification as read
 exports.markAsRead = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
+    const databaseUserId = req.userId; // authMiddleware provides userId directly
     const { notificationId } = req.params;
-
-        // Convert Firebase UID to database user ID
-        const User = require('../models/User');
-        let databaseUserId = firebaseUserId;
-        
-        try {
-          if (firebaseUserId.length > 20) {
-            const user = await User.findByFirebaseUid(firebaseUserId);
-            if (user) {
-              databaseUserId = user.id;
-            }
-          }
-        } catch (error) {
-          console.error('Error converting user ID for mark as read:', error);
-        }
     
     const notificationModel = new Notification();
     const notification = await notificationModel.markAsRead(notificationId, databaseUserId);
@@ -181,23 +119,8 @@ exports.markAsRead = async (req, res) => {
 // Mark all notifications as read
 exports.markAllAsRead = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
+    const databaseUserId = req.userId; // authMiddleware provides userId directly
     const { facilityId } = req.body;
-
-    // Convert Firebase UID to database user ID
-    const User = require('../models/User');
-    let databaseUserId = firebaseUserId;
-    
-    try {
-      if (firebaseUserId.length > 20) {
-        const user = await User.findByFirebaseUid(firebaseUserId);
-        if (user) {
-          databaseUserId = user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Error converting user ID for mark all as read:', error);
-    }
 
     const notificationModel = new Notification();
     const result = await notificationModel.markAllAsRead(databaseUserId, facilityId);
@@ -219,23 +142,8 @@ exports.markAllAsRead = async (req, res) => {
 // Delete notification
 exports.deleteNotification = async (req, res) => {
   try {
-    const firebaseUserId = req.user.firebaseUid;
+    const databaseUserId = req.userId; // authMiddleware provides userId directly
     const { notificationId } = req.params;
-
-    // Convert Firebase UID to database user ID
-    const User = require('../models/User');
-    let databaseUserId = firebaseUserId;
-    
-    try {
-      if (firebaseUserId.length > 20) {
-        const user = await User.findByFirebaseUid(firebaseUserId);
-        if (user) {
-          databaseUserId = user.id;
-        }
-      }
-    } catch (error) {
-      console.error('Error converting user ID for delete notification:', error);
-    }
 
     const notificationModel = new Notification();
     await notificationModel.deleteNotification(notificationId, databaseUserId);
@@ -334,3 +242,5 @@ exports.cleanupExpiredNotifications = async (req, res) => {
     });
   }
 };
+
+// Test notification method removed - no longer needed

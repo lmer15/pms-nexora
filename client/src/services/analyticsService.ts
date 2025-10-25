@@ -52,7 +52,12 @@ class AnalyticsService {
 
   async downloadExport(downloadUrl: string, filename: string): Promise<void> {
     try {
-      const response = await fetch(downloadUrl);
+      // Construct the full URL for the PDF file
+      const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+      const serverBaseUrl = baseUrl.replace('/api', ''); // Remove /api to get server base URL
+      const fullUrl = `${serverBaseUrl}${downloadUrl}`;
+      
+      const response = await fetch(fullUrl);
       if (!response.ok) {
         throw new Error('Failed to download export file');
       }

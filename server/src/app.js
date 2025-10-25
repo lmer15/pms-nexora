@@ -31,6 +31,9 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static files for attachments
 app.use('/uploads/attachments', express.static(path.join(__dirname, '../uploads/attachments')));
 
+// Serve static files for temp directory (PDF exports)
+app.use('/temp', express.static(path.join(__dirname, '../temp')));
+
 // Test route
 app.get('/api/health', (req, res) => {
   res.json({

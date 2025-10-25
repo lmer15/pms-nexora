@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
+import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import MemberKpiStrip from './MemberKpiStrip';
 import MemberCharts from './MemberCharts';
 import MemberTimeline from './MemberTimeline';
@@ -29,6 +30,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const { memberId: paramMemberId } = useParams<{ memberId: string }>();
   const memberId = propMemberId || paramMemberId;
   const { token } = useAuth();
+  const { refreshTrigger, userProfileRefreshTrigger } = useFacilityRefresh();
   const [data, setData] = useState<MemberAnalyticsResponse | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({
     } else {
       setLoading(false);
     }
-  }, [timeRange, memberId, token]);
+  }, [timeRange, memberId, token, refreshTrigger, userProfileRefreshTrigger]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {

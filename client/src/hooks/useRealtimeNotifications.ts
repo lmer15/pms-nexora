@@ -46,10 +46,12 @@ export const useRealtimeNotifications = () => {
 
     try {
       setLoading(true);
+      
       const response = await notificationService.getNotifications({
         limit: 20,
         facilityId: currentFacility?.id
       });
+      
       setNotifications(response.notifications);
 
       const count = await notificationService.getUnreadCount(currentFacility?.id);
@@ -75,34 +77,34 @@ export const useRealtimeNotifications = () => {
 
     const userId = user.uid;
     
-    // Listen for new notifications
     const notificationsRef = ref(realtimeDb, `userNotifications/${userId}`);
     const countRef = ref(realtimeDb, `userNotificationCounts/${userId}`);
     
 
     const handleNotificationChange = (snapshot: any) => {
-      const data = snapshot.val();
-      if (data) {
-        const newNotifications: Notification[] = Object.values(data).map((notification: any) => ({
-          id: notification.id,
-          userId: notification.userId,
-          type: notification.type,
-          title: notification.title,
-          message: notification.message,
-          data: notification.data,
-          read: notification.read,
-          priority: notification.priority,
-          category: notification.category,
-          sourceId: notification.sourceId,
-          sourceType: notification.sourceType,
-          facilityId: notification.facilityId,
-          projectId: notification.projectId,
-          taskId: notification.taskId,
-          actionUrl: notification.actionUrl,
-          expiresAt: notification.expiresAt,
-          createdAt: notification.createdAt,
-          updatedAt: notification.updatedAt
-        }));
+      try {
+        const data = snapshot.val();
+        if (data) {
+          const newNotifications: Notification[] = Object.values(data).map((notification: any) => ({
+            id: notification.id,
+            userId: notification.userId,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            data: notification.data,
+            read: notification.read,
+            priority: notification.priority,
+            category: notification.category,
+            sourceId: notification.sourceId,
+            sourceType: notification.sourceType,
+            facilityId: notification.facilityId,
+            projectId: notification.projectId,
+            taskId: notification.taskId,
+            actionUrl: notification.actionUrl,
+            expiresAt: notification.expiresAt,
+            createdAt: notification.createdAt,
+            updatedAt: notification.updatedAt
+          }));
 
           // Sort by creation date (newest first)
           newNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -111,6 +113,10 @@ export const useRealtimeNotifications = () => {
         } else {
           // Don't clear notifications if Firebase returns null - keep the ones from REST API
         }
+      } catch (err) {
+        console.error('Error processing notification data:', err);
+        setError('Failed to process notifications');
+      }
     };
 
     const handleCountChange = (snapshot: any) => {
@@ -118,23 +124,39 @@ export const useRealtimeNotifications = () => {
       setUnreadCount(count || 0);
     };
 
-    // Set up listeners
+    // Set up listeners with error handling - make Firebase optional
     onValue(notificationsRef, handleNotificationChange, (error) => {
       if (error) {
-        console.error('Firebase listener error:', error);
+        console.warn('Firebase listener error (using REST API fallback):', error);
+        // Don't set error state, just use REST API
       }
     });
     onValue(countRef, handleCountChange, (error) => {
       if (error) {
-        console.error('Firebase count listener error:', error);
+        console.warn('Firebase count listener error (using REST API fallback):', error);
+        // Don't set error state, just use REST API
       }
     });
 
     // Load initial data
     loadInitialNotifications();
 
+    // Set up periodic refresh as fallback (every 30 seconds)
+    const refreshInterval = setInterval(() => {
+      loadInitialNotifications();
+    }, 30000);
+
+    // Set up retry mechanism for failed loads
+    const retryInterval = setInterval(() => {
+      if (notifications.length === 0 && !loading) {
+        loadInitialNotifications();
+      }
+    }, 10000); // Check every 10 seconds
+
     // Cleanup listeners
     return () => {
+      clearInterval(refreshInterval);
+      clearInterval(retryInterval);
       off(notificationsRef, 'value', handleNotificationChange);
       off(countRef, 'value', handleCountChange);
     };
@@ -196,6 +218,7 @@ export const useRealtimeNotifications = () => {
   const refreshNotifications = useCallback(() => {
     loadInitialNotifications();
   }, [loadInitialNotifications]);
+
 
   return {
     notifications,

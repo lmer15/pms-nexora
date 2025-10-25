@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserRole } from '../../../hooks/useUserRole';
 import { useAnalyticsDashboard } from '../../../hooks/useAnalyticsDashboard';
+import { useFacilityRefresh } from '../../../context/FacilityRefreshContext';
 import GlobalKpiStrip from './GlobalKpiStrip';
 import GlobalCharts from './GlobalCharts';
 import GlobalFacilitiesTable from './GlobalFacilitiesTable';
@@ -21,6 +22,7 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
   className = ''
 }) => {
   const navigate = useNavigate();
+  const { refreshTrigger, userProfileRefreshTrigger } = useFacilityRefresh();
   const {
     data,
     insights,
@@ -31,7 +33,8 @@ const GlobalDashboard: React.FC<GlobalDashboardProps> = ({
     fetchData,
     handleTimeRangeChange
   } = useAnalyticsDashboard<GlobalAnalyticsResponse>({
-    fetchFunction: (range: TimeRange) => analyticsService.getGlobalAnalytics(range, true)
+    fetchFunction: (range: TimeRange) => analyticsService.getGlobalAnalytics(range, true),
+    refreshTriggers: [refreshTrigger, userProfileRefreshTrigger]
   });
 
 

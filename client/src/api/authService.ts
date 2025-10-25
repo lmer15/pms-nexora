@@ -57,5 +57,10 @@ export const authService = {
   async getProfile() {
     const response = await api.get('/auth/profile');
     return response.data;
+  },
+
+  async setPasswordForGoogleUser(password: string) {
+    const response = await api.post('/auth/set-password', { password });
+    return response.data;
   }
 };

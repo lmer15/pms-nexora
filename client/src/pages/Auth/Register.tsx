@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../config/firebase';
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import PasswordSetupModal from '../../components/PasswordSetupModal';
 
 export default function Register() {
-  const { register, googleLogin } = useAuth();
+  const { register, googleLogin, setPasswordForGoogleUser } = useAuth();
 
   // Registration state
   const [firstName, setFirstName] = useState("");
@@ -18,6 +19,8 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [googleUser, setGoogleUser] = useState<any>(null);
 
   // Handle registration
   const handleRegister = async (e: React.FormEvent) => {
@@ -40,7 +43,7 @@ export default function Register() {
     try {
       await register(email, password, firstName, lastName);
       setSuccess(true);
-      // User will be redirected after email verification
+      // User will be redirected to login after email verification
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -58,7 +61,14 @@ export default function Register() {
 
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
-      await googleLogin(idToken);
+      const response = await googleLogin(idToken);
+      
+      // Check if user needs to set password
+      if (response?.needsPasswordSetup) {
+        setGoogleUser(response.user);
+        setShowPasswordModal(true);
+      }
+      // If user doesn't need password setup, App.tsx will handle navigation
     } catch (err: any) {
       console.error('Google auth error:', err);
       let errorMessage = 'Google sign-in failed. Please try again.';
@@ -77,6 +87,18 @@ export default function Register() {
       }
 
       setError(errorMessage);
+    }
+  };
+
+  // Handle password setup for Google users
+  const handlePasswordSetup = async (password: string) => {
+    try {
+      await setPasswordForGoogleUser(password);
+      setShowPasswordModal(false);
+      setGoogleUser(null);
+    } catch (err: any) {
+      console.error('Password setup error:', err);
+      setError(err.message || 'Failed to set password');
     }
   };
 
@@ -322,6 +344,17 @@ export default function Register() {
           </div>
         </div>
       </div>
+
+      {/* Password Setup Modal for Google Users */}
+      <PasswordSetupModal
+        isOpen={showPasswordModal}
+        onClose={() => {
+          setShowPasswordModal(false);
+          setGoogleUser(null);
+        }}
+        onPasswordSet={handlePasswordSetup}
+        isDarkMode={false}
+      />
     </div>
   );
 }
